@@ -27,7 +27,7 @@ interface Translatable
     public function replaceTranslations(array $fields): static;
 
     /**
-     * @return array<string, mixed>
+     * @return ($key is null ? array<string, array<string, string>> : array<string, string>)
      */
     public function getTranslations(?string $key = null): array;
 
@@ -46,6 +46,15 @@ interface Translatable
      * @return list<string>
      */
     public function missingLocales(string $key): array;
+
+    /**
+     * @return array<string, list<string>>
+     */
+    public function missingTranslations(): array;
+
+    public function isFullyTranslated(?string $key = null): bool;
+
+    public function translationCompleteness(): float;
 
     public function isTranslatableAttribute(string $key): bool;
 

@@ -116,20 +116,18 @@ trait HasTranslatableSlug
         $slugs = [];
 
         foreach ($this->getTranslations($column) as $locale => $value) {
-            if (is_string($value) && $value !== '') {
-                $slugs[(string) $locale] = $value;
+            if ($value !== '') {
+                $slugs[$locale] = $value;
             }
         }
 
         foreach ($sources as $locale => $source) {
-            $locale = (string) $locale;
-
             if (isset($slugs[$locale])) {
                 continue;
             }
 
             $slugs[$locale] = $generator->generate(
-                is_string($source) ? $source : null,
+                $source === '' ? null : $source,
                 fn (string $candidate): bool => $this->translatedSlugExists($column, $locale, $candidate),
             );
         }

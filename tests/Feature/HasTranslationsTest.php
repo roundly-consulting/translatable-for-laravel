@@ -5,6 +5,8 @@ declare(strict_types=1);
 use Illuminate\Support\Facades\DB;
 use RoundlyConsulting\Translatable\Enums\FallbackMode;
 use RoundlyConsulting\Translatable\Exceptions\NotATranslatableAttributeException;
+use RoundlyConsulting\Translatable\Tests\Fixtures\EmptyStatusTopic;
+use RoundlyConsulting\Translatable\Tests\Fixtures\ExcludingTopic;
 use RoundlyConsulting\Translatable\Tests\Fixtures\StrictTopic;
 use RoundlyConsulting\Translatable\Tests\Fixtures\Topic;
 
@@ -102,6 +104,82 @@ it('reports translated and missing locales', function (): void {
         ->and($topic->missingLocales('name'))->toBe(['sk']);
 });
 
+it('reports missing translations across every field', function (): void {
+    $topic = new Topic([
+        'name' => ['en' => 'Investing', 'sk' => 'Investovanie'],
+        'description' => ['en' => 'A guide'],
+        'slug' => ['en' => 'investing', 'sk' => 'investovanie'],
+    ]);
+
+    expect($topic->missingTranslations())->toBe([
+        'name' => [],
+        'description' => ['sk'],
+        'slug' => [],
+    ]);
+});
+
+it('reports full and partial translation for the whole model', function (): void {
+    $full = new Topic([
+        'name' => ['en' => 'A', 'sk' => 'A'],
+        'description' => ['en' => 'B', 'sk' => 'B'],
+        'slug' => ['en' => 'a', 'sk' => 'a'],
+    ]);
+    $partial = new Topic(['name' => ['en' => 'A']]);
+
+    expect($full->isFullyTranslated())->toBeTrue()
+        ->and($partial->isFullyTranslated())->toBeFalse()
+        ->and($partial->isFullyTranslated('name'))->toBeFalse();
+
+    $partial->setTranslation('name', 'sk', 'B');
+    expect($partial->isFullyTranslated('name'))->toBeTrue();
+});
+
+it('computes translation completeness as a ratio', function (): void {
+    $empty = new Topic;
+    $full = new Topic([
+        'name' => ['en' => 'A', 'sk' => 'A'],
+        'description' => ['en' => 'B', 'sk' => 'B'],
+        'slug' => ['en' => 'a', 'sk' => 'a'],
+    ]);
+    // 3 fields x 2 locales = 6 slots; en filled on all three = 3/6.
+    $half = new Topic([
+        'name' => ['en' => 'A'],
+        'description' => ['en' => 'B'],
+        'slug' => ['en' => 'a'],
+    ]);
+
+    expect($empty->translationCompleteness())->toBe(0.0)
+        ->and($full->translationCompleteness())->toBe(1.0)
+        ->and($half->translationCompleteness())->toBe(0.5);
+});
+
+it('ignores unsupported locale values in completeness', function (): void {
+    $topic = new Topic(['name' => ['en' => 'A', 'de' => 'A'], 'description' => ['en' => 'B'], 'slug' => ['en' => 'a']]);
+
+    // 'de' is unsupported, so it does not count toward filled slots: 3/6.
+    expect($topic->translationCompleteness())->toBe(0.5);
+});
+
+it('honours the status excludes list', function (): void {
+    $topic = new ExcludingTopic([
+        'name' => ['en' => 'A', 'sk' => 'A'],
+        'description' => ['en' => 'B', 'sk' => 'B'],
+        // slug intentionally left empty — excluded from status.
+    ]);
+
+    expect($topic->missingTranslations())->toBe(['name' => [], 'description' => []])
+        ->and($topic->isFullyTranslated())->toBeTrue()
+        ->and($topic->translationCompleteness())->toBe(1.0);
+});
+
+it('treats a model with no status attributes as vacuously complete', function (): void {
+    $topic = new EmptyStatusTopic;
+
+    expect($topic->missingTranslations())->toBe([])
+        ->and($topic->isFullyTranslated())->toBeTrue()
+        ->and($topic->translationCompleteness())->toBe(1.0);
+});
+
 it('reports the translatable attribute surface', function (): void {
     $topic = new Topic;
 
@@ -142,6 +220,29 @@ it('throws for a non-translatable attribute', function (): void {
 
     expect(fn () => $topic->getTranslation('id'))
         ->toThrow(NotATranslatableAttributeException::class);
+});
+
+it('forgets a single locale via forgetTranslation', function (): void {
+    $topic = new Topic(['name' => ['en' => 'Investing', 'sk' => 'Investovanie']]);
+
+    $topic->forgetTranslation('name', 'sk');
+
+    expect($topic->getTranslations('name'))->toBe(['en' => 'Investing']);
+});
+
+it('treats a non-object JSON value as an empty map', function (): void {
+    DB::table('topics')->insert([
+        'id' => 1,
+        'name' => json_encode('just a string'),
+        'description' => json_encode(['en' => 'Guide', 'sk' => '']),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $topic = Topic::query()->find(1);
+
+    expect($topic->getTranslations('name'))->toBe([])
+        ->and($topic->getTranslations('description'))->toBe(['en' => 'Guide']);
 });
 
 it('reads plain JSON literals stored by the hand-rolled convention', function (): void {

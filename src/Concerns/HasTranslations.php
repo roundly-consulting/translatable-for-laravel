@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Translatable\Concerns;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Translatable\Enums\FallbackMode;
 use RoundlyConsulting\Translatable\Exceptions\NotATranslatableAttributeException;
@@ -32,6 +33,26 @@ trait HasTranslations
         }
 
         return parent::getAttributeValue($key);
+    }
+
+    /**
+     * Serialize translatable attributes as their resolved locale value (matching `$model->name`)
+     * rather than the raw stored JSON map, so `toArray()`/`toJson()`/API Resources agree with
+     * property access. Persisted data is untouched — this changes output shape only.
+     *
+     * @return array<string, mixed>
+     */
+    public function attributesToArray(): array
+    {
+        $array = parent::attributesToArray();
+
+        foreach ($this->getTranslatableAttributes() as $attribute) {
+            if (array_key_exists($attribute, $array)) {
+                $array[$attribute] = $this->getTranslation($attribute, $this->currentLocale(), true);
+            }
+        }
+
+        return $array;
     }
 
     public function setAttribute($key, $value)
@@ -111,7 +132,7 @@ trait HasTranslations
     }
 
     /**
-     * @return array<string, mixed>
+     * @return ($key is null ? array<string, array<string, string>> : array<string, string>)
      */
     public function getTranslations(?string $key = null): array
     {
@@ -165,9 +186,129 @@ trait HasTranslations
         return array_values(array_diff(Translations::supported(), $this->getTranslatedLocales($key)));
     }
 
+    /**
+     * Missing locales for every translatable attribute (minus the status-excluded ones).
+     *
+     * @return array<string, list<string>>
+     */
+    public function missingTranslations(): array
+    {
+        $missing = [];
+
+        foreach ($this->translationStatusAttributes() as $attribute) {
+            $missing[$attribute] = $this->missingLocales($attribute);
+        }
+
+        return $missing;
+    }
+
+    /**
+     * Whether one attribute (or every translatable attribute) has every supported locale.
+     */
+    public function isFullyTranslated(?string $key = null): bool
+    {
+        if ($key !== null) {
+            return $this->missingLocales($key) === [];
+        }
+
+        foreach ($this->translationStatusAttributes() as $attribute) {
+            if ($this->missingLocales($attribute) !== []) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Fraction (0.0–1.0) of supported locale slots filled across the translatable attributes —
+     * ready for a progress bar. Empty of status attributes counts as fully translated (1.0).
+     */
+    public function translationCompleteness(): float
+    {
+        $attributes = $this->translationStatusAttributes();
+        $locales = Translations::supported();
+        $total = count($attributes) * count($locales);
+
+        if ($total === 0) {
+            return 1.0;
+        }
+
+        $filled = 0;
+
+        foreach ($attributes as $attribute) {
+            $filled += count(array_intersect($locales, $this->getTranslatedLocales($attribute)));
+        }
+
+        return $filled / $total;
+    }
+
+    /**
+     * @param  Builder<Model>  $query
+     * @return Builder<Model>
+     */
+    public function scopeWhereLocale(Builder $query, string $field, string $value, ?string $locale = null): Builder
+    {
+        $locale ??= $this->currentLocale();
+
+        return $query->where("{$field}->{$locale}", $value);
+    }
+
+    /**
+     * Rows that carry a non-blank value for the given locale of the field.
+     *
+     * @param  Builder<Model>  $query
+     * @return Builder<Model>
+     */
+    public function scopeWhereHasLocale(Builder $query, string $field, ?string $locale = null): Builder
+    {
+        $locale ??= $this->currentLocale();
+
+        return $query->where(function (Builder $inner) use ($field, $locale): void {
+            $inner->whereNotNull("{$field}->{$locale}")
+                ->where("{$field}->{$locale}", '!=', '');
+        });
+    }
+
+    /**
+     * Rows missing the given locale of the field (feeds an AI auto-fill queue).
+     *
+     * @param  Builder<Model>  $query
+     * @return Builder<Model>
+     */
+    public function scopeWhereMissingLocale(Builder $query, string $field, ?string $locale = null): Builder
+    {
+        $locale ??= $this->currentLocale();
+
+        return $query->where(function (Builder $inner) use ($field, $locale): void {
+            $inner->whereNull("{$field}->{$locale}")
+                ->orWhere("{$field}->{$locale}", '');
+        });
+    }
+
     public function isTranslatableAttribute(string $key): bool
     {
         return in_array($key, $this->getTranslatableAttributes(), true);
+    }
+
+    /**
+     * Translatable attributes counted for whole-model status, minus the excluded ones.
+     *
+     * @return list<string>
+     */
+    protected function translationStatusAttributes(): array
+    {
+        return array_values(array_diff($this->getTranslatableAttributes(), $this->translationStatusExcludes()));
+    }
+
+    /**
+     * Attributes excluded from whole-model status (e.g. a slug column). Override to customise.
+     *
+     * @return list<string>
+     */
+    protected function translationStatusExcludes(): array
+    {
+        return [];
     }
 
     /**
