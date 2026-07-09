@@ -11,12 +11,17 @@ use RoundlyConsulting\Translatable\Contracts\SupportedLocales;
 use RoundlyConsulting\Translatable\Contracts\Translatable;
 use RoundlyConsulting\Translatable\DataTransferObjects\TranslationChanges;
 use RoundlyConsulting\Translatable\DataTransferObjects\TranslationSearch;
+use RoundlyConsulting\Translatable\Enums\DatabaseDriver;
 use RoundlyConsulting\Translatable\Enums\FallbackMode;
 
 /**
  * The single, injectable/mockable front door for the locale-map toolkit. Bound in the
  * container and fronted by the `Translatable` facade; the static `Translations::…` helpers
  * delegate here so a host can swap one fake and have every call observe it.
+ *
+ * Intentionally NOT `final`: this is the package's one designed extension/swap seam. Hosts
+ * override a method (e.g. `supported()`) by extending it and `Translatable::swap()`-ing the
+ * subclass — the sibling methods observe the override polymorphically. See FacadeTest.
  */
 class TranslationManager
 {
@@ -133,14 +138,18 @@ class TranslationManager
      */
     public function search(Builder $query, TranslationSearch $search): Builder
     {
-        $operator = $query->getModel()->getConnection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
-        $term = '%'.$search->term.'%';
+        $operator = $query->getModel()->getConnection()->getDriverName() === DatabaseDriver::Pgsql->value ? 'ilike' : 'like';
+        // Escape LIKE wildcards so a term like "100%" scopes the (bound) match instead of
+        // matching everything; the value stays bound, this only neutralises %/_/\ meaning.
+        $term = '%'.addcslashes($search->term, '%_\\').'%';
         $locales = $this->supported();
 
         return $query->where(static function (Builder $inner) use ($search, $operator, $term, $locales): void {
             foreach ($search->fields as $field) {
+                LocaleGuard::ensureIdentifier($field, 'search field');
+
                 foreach ($locales as $locale) {
-                    $inner->orWhere("{$field}->{$locale}", $operator, $term);
+                    $inner->orWhere("{$field}->".LocaleGuard::ensure($locale), $operator, $term);
                 }
             }
         });

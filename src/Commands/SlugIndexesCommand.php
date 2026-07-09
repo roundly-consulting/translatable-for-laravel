@@ -6,6 +6,8 @@ namespace RoundlyConsulting\Translatable\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Schema;
+use RoundlyConsulting\Translatable\Enums\DatabaseDriver;
+use RoundlyConsulting\Translatable\Support\LocaleGuard;
 use RoundlyConsulting\Translatable\Support\TranslatableSlug;
 
 /**
@@ -20,14 +22,26 @@ final class SlugIndexesCommand extends Command
 
     public function handle(): int
     {
-        if (Schema::getConnection()->getDriverName() !== 'pgsql') {
+        $table = is_string($argument = $this->argument('table')) ? $argument : '';
+        $column = is_string($option = $this->option('column')) ? $option : 'slug';
+
+        if (! LocaleGuard::isValidIdentifier($table)) {
+            $this->error("Invalid table name [{$table}]; only letters, digits and underscores are allowed.");
+
+            return self::FAILURE;
+        }
+
+        if (! LocaleGuard::isValidIdentifier($column)) {
+            $this->error("Invalid column name [{$column}]; only letters, digits and underscores are allowed.");
+
+            return self::FAILURE;
+        }
+
+        if (Schema::getConnection()->getDriverName() !== DatabaseDriver::Pgsql->value) {
             $this->warn('translatable:slug-indexes only runs on PostgreSQL; skipping.');
 
             return self::SUCCESS;
         }
-
-        $table = is_string($argument = $this->argument('table')) ? $argument : '';
-        $column = is_string($option = $this->option('column')) ? $option : 'slug';
 
         TranslatableSlug::uniqueIndexes($table, $column);
 

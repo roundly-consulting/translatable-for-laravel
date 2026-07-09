@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Validator;
 use RoundlyConsulting\Translatable\Contracts\SupportedLocales;
 use RoundlyConsulting\Translatable\DataTransferObjects\UniqueSlugContext;
+use RoundlyConsulting\Translatable\Enums\DatabaseDriver;
 
 /**
  * Migration/index helpers for per-locale translatable slugs, plus per-locale
@@ -32,17 +33,33 @@ final class TranslatableSlug
      */
     public static function uniqueIndexes(string $table, string $column = 'slug'): void
     {
+        // Everything below reaches a raw DDL statement where nothing can be parameter-bound,
+        // so identifiers are allowlisted here (before the driver short-circuit) and the locale
+        // is PDO-quoted below.
+        LocaleGuard::ensureIdentifier($table, 'table name');
+        LocaleGuard::ensureIdentifier($column, 'column name');
+
         $connection = Schema::getConnection();
 
-        if ($connection->getDriverName() !== 'pgsql') {
+        if ($connection->getDriverName() !== DatabaseDriver::Pgsql->value) {
             return;
         }
 
+        $grammar = $connection->getSchemaGrammar();
+        $pdo = $connection->getPdo();
+
         foreach (self::locales() as $locale) {
+            LocaleGuard::ensure($locale);
+
             $index = self::indexName($table, $column, $locale);
 
+            $wrappedIndex = $grammar->wrap(LocaleGuard::ensureIdentifier($index, 'index name'));
+            $wrappedTable = $grammar->wrap($table);
+            $wrappedColumn = $grammar->wrap($column);
+            $quotedLocale = $pdo->quote($locale);
+
             $connection->statement(
-                "CREATE UNIQUE INDEX IF NOT EXISTS {$index} ON {$table} (({$column}->>'{$locale}'))"
+                "CREATE UNIQUE INDEX IF NOT EXISTS {$wrappedIndex} ON {$wrappedTable} (({$wrappedColumn}->>{$quotedLocale}))"
             );
         }
     }
@@ -68,6 +85,9 @@ final class TranslatableSlug
      */
     public static function slugTaken(string $table, string $column, string $locale, string $slug, int|string|null $ignoreId, string $keyName = 'id'): bool
     {
+        LocaleGuard::ensureIdentifier($column, 'column name');
+        LocaleGuard::ensure($locale);
+
         $query = DB::table($table)->where("{$column}->{$locale}", $slug);
 
         if ($ignoreId !== null) {

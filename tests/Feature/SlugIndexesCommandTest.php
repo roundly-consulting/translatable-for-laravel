@@ -25,3 +25,9 @@ it('is a no-op when uniqueIndexes runs on sqlite', function (): void {
 it('builds a deterministic index name', function (): void {
     expect(TranslatableSlug::indexName('topics', 'slug', 'en'))->toBe('topics_slug_en_unique');
 });
+
+it('fails on a hostile column option', function (): void {
+    $this->artisan('translatable:slug-indexes', ['table' => 'topics', '--column' => "slug'; DROP"])
+        ->expectsOutputToContain('Invalid column name')
+        ->assertFailed();
+});
