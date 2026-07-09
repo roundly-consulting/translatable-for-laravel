@@ -1,0 +1,85 @@
+{
+    "name": "roundly-consulting/translatable-for-laravel",
+    "description": "Locale-map (jsonb) translatable attributes, a fallback chain, and per-locale unique translatable slugs for Eloquent — native, zero third-party deps.",
+    "keywords": [
+        "roundly-consulting",
+        "laravel",
+        "translatable",
+        "localization",
+        "i18n",
+        "slug",
+        "jsonb"
+    ],
+    "homepage": "https://github.com/roundly-consulting/translatable-for-laravel",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Andrej Mihaliak",
+            "email": "andrej@mihaliak.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.4",
+        "ext-json": "*",
+        "illuminate/console": "^12.0|^13.0",
+        "illuminate/contracts": "^12.0|^13.0",
+        "illuminate/database": "^12.0|^13.0",
+        "illuminate/support": "^12.0|^13.0",
+        "illuminate/validation": "^12.0|^13.0",
+        "roundly-consulting/enums-for-laravel": "@dev"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.0",
+        "nunomaduro/collision": "^8.0",
+        "orchestra/testbench": "^10.0|^11.0",
+        "pestphp/pest": "^4.0",
+        "pestphp/pest-plugin-laravel": "^4.0"
+    },
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../enums-for-laravel*",
+            "options": {
+                "symlink": true
+            }
+        },
+        {
+            "type": "vcs",
+            "url": "https://github.com/roundly-consulting/enums-for-laravel",
+            "no-api": true
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "RoundlyConsulting\\Translatable\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "RoundlyConsulting\\Translatable\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "format": "vendor/bin/pint",
+        "analyse": "vendor/bin/phpstan analyse --no-progress",
+        "test": "vendor/bin/pest",
+        "test-coverage": "vendor/bin/pest --coverage --min=90"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "RoundlyConsulting\\Translatable\\TranslatableServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}

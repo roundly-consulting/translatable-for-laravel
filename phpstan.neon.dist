@@ -1,0 +1,15 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+parameters:
+    level: 7
+    paths:
+        - src
+        - config
+        # The consumer-facing traits are only applied by host models, so include the
+        # test fixtures that use them so PHPStan analyses the traits in context.
+        - tests/Fixtures/Topic.php
+        - tests/Fixtures/Article.php
+        - tests/Fixtures/StrictTopic.php
+    # This package ships its own config/ dir; env() is correct there.
+    configDirectories:
+        - config
