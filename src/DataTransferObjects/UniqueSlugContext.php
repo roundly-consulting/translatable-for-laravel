@@ -12,7 +12,8 @@ final readonly class UniqueSlugContext
     public function __construct(
         public mixed $input,
         public string $table,
-        public ?int $ignoreId = null,
+        public int|string|null $ignoreId = null,
         public string $column = 'slug',
+        public string $keyName = 'id',
     ) {}
 }

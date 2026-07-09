@@ -2,16 +2,31 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use RoundlyConsulting\Translatable\DataTransferObjects\UniqueSlugContext;
 use RoundlyConsulting\Translatable\Rules\UniqueTranslatedSlug;
 use RoundlyConsulting\Translatable\Support\TranslatableSlug;
+use RoundlyConsulting\Translatable\Tests\Fixtures\KeyedRecord;
 use RoundlyConsulting\Translatable\Tests\Fixtures\Topic;
 
 beforeEach(function (): void {
     $this->createTopicsTable();
     app()->setLocale('en');
 });
+
+function createKeyedRecordsTable(): void
+{
+    Schema::dropIfExists('keyed_records');
+
+    Schema::create('keyed_records', function (Blueprint $table): void {
+        $table->string('code')->primary();
+        $table->jsonb('slug')->nullable();
+        $table->timestamps();
+        $table->softDeletes();
+    });
+}
 
 it('detects a taken per-locale slug', function (): void {
     Topic::query()->create(['name' => ['en' => 'Investing']]);
@@ -81,4 +96,34 @@ it('honours ignore-id in the rule', function (): void {
     );
 
     expect($validator->fails())->toBeFalse();
+});
+
+it('respects a non-id primary key when ignoring a row', function (): void {
+    createKeyedRecordsTable();
+    KeyedRecord::query()->create(['code' => 'abc', 'slug' => ['en' => 'investing']]);
+
+    // A different string key still collides.
+    expect(TranslatableSlug::slugTaken('keyed_records', 'slug', 'en', 'investing', 'xyz', 'code'))->toBeTrue()
+        // Ignoring its own string key clears the collision.
+        ->and(TranslatableSlug::slugTaken('keyed_records', 'slug', 'en', 'investing', 'abc', 'code'))->toBeFalse();
+});
+
+it('validates a custom key name through the rule and context', function (): void {
+    createKeyedRecordsTable();
+    KeyedRecord::query()->create(['code' => 'abc', 'slug' => ['en' => 'investing']]);
+
+    $ignoringSelf = Validator::make(
+        ['slug' => ['en' => 'investing']],
+        ['slug' => new UniqueTranslatedSlug('keyed_records', 'abc', keyName: 'code')],
+    );
+
+    $validator = Validator::make([], []);
+    TranslatableSlug::assertUnique($validator, new UniqueSlugContext(
+        input: ['en' => 'investing'],
+        table: 'keyed_records',
+        keyName: 'code',
+    ));
+
+    expect($ignoringSelf->fails())->toBeFalse()
+        ->and($validator->errors()->has('slug.en'))->toBeTrue();
 });

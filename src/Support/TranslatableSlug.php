@@ -53,7 +53,7 @@ final class TranslatableSlug
     public static function assertUnique(Validator $validator, UniqueSlugContext $context): void
     {
         foreach (Translations::fromInput($context->input) as $locale => $slug) {
-            if (self::slugTaken($context->table, $context->column, $locale, $slug, $context->ignoreId)) {
+            if (self::slugTaken($context->table, $context->column, $locale, $slug, $context->ignoreId, $context->keyName)) {
                 $validator->errors()->add(
                     "{$context->column}.{$locale}",
                     (string) __('translatable::validation.unique_slug', ['locale' => $locale]),
@@ -63,14 +63,15 @@ final class TranslatableSlug
     }
 
     /**
-     * Whether the given slug is already used for the given locale (ignoring an id and soft-deleted rows).
+     * Whether the given slug is already used for the given locale (ignoring a row by its key and
+     * soft-deleted rows). `$keyName` supports non-`id` primary keys (uuid, custom, …).
      */
-    public static function slugTaken(string $table, string $column, string $locale, string $slug, ?int $ignoreId): bool
+    public static function slugTaken(string $table, string $column, string $locale, string $slug, int|string|null $ignoreId, string $keyName = 'id'): bool
     {
         $query = DB::table($table)->where("{$column}->{$locale}", $slug);
 
         if ($ignoreId !== null) {
-            $query->where('id', '!=', $ignoreId);
+            $query->where($keyName, '!=', $ignoreId);
         }
 
         if (Schema::hasColumn($table, 'deleted_at')) {
