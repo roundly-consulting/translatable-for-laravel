@@ -136,6 +136,114 @@ $topic->name = ['en' => 'Investing', 'sk' => 'Investovanie']; // replaces the ma
 Blank/`null` values are dropped, so a map never stores an empty string and the fallback chain
 always has something real to fall back to.
 
+### Serialization (`toArray` / `toJson` / API Resources)
+
+`toArray()`, `toJson()`, `response()->json($model)`, and API Resources emit the **resolved locale
+value** for each translatable attribute — identical to `$model->name` — not the raw stored JSON
+map:
+
+```php
+$topic->toArray()['name'];   // "Investing"  (localized, through the fallback chain)
+$topic->toJson();            // {"name":"Investing", …}
+TopicResource::make($topic); // {"name":"Investing"}
+```
+
+The effective `FallbackMode` is honoured (a `None` model with only `sk` set serializes `name` as
+`null` for an `en` request). Persisted data is untouched — this changes output shape only. When an
+admin screen needs the full map, call `getTranslations('name')` explicitly.
+
+### Whole-model translation status
+
+For admin completeness UIs, query status across every translatable attribute in one call:
+
+```php
+$topic->missingTranslations();     // ['description' => ['sk']]  field => missing locales
+$topic->isFullyTranslated();       // bool — every field has every supported locale
+$topic->isFullyTranslated('name'); // bool — one attribute
+$topic->translationCompleteness(); // 0.0–1.0 — filled / (fields × locales), for a progress bar
+```
+
+Exclude a column (e.g. the slug) from a "content complete" bar by overriding a protected method:
+
+```php
+/** @return list<string> */
+protected function translationStatusExcludes(): array
+{
+    return ['slug'];
+}
+```
+
+### Translation-changed event (opt-in)
+
+Add the `DispatchesTranslationEvents` trait to have the model dispatch a single
+`TranslationsChanged` event once per persisted save when any translatable attribute changed —
+ideal for queuing an AI service to fill `missingLocales()` or busting a cache, without overriding
+the model. The base `HasTranslations` trait stays side-effect-free; nothing fires unless you opt in.
+
+```php
+use RoundlyConsulting\Translatable\Concerns\DispatchesTranslationEvents;
+use RoundlyConsulting\Translatable\Concerns\HasTranslations;
+
+final class Topic extends Model implements Translatable
+{
+    use HasTranslations;
+    use DispatchesTranslationEvents;
+    // …
+}
+```
+
+```php
+use RoundlyConsulting\Translatable\Events\TranslationsChanged;
+
+Event::listen(TranslationsChanged::class, function (TranslationsChanged $event): void {
+    foreach ($event->changedAttributes as $attribute) {          // list<string>
+        if ($event->model->missingLocales($attribute) !== []) {
+            FillMissingTranslations::dispatch($event->model, $attribute);
+        }
+    }
+});
+```
+
+### Query scopes
+
+Driver-agnostic JSON-path scopes over supported locales (work on any Laravel database):
+
+```php
+Topic::query()->whereLocale('name', 'Investing', 'en'); // exact per-locale value (locale defaults to app locale)
+Topic::query()->whereHasLocale('name', 'sk');           // rows with a non-blank 'sk' value
+Topic::query()->whereMissingLocale('name', 'sk');       // rows missing 'sk' (feed an AI-fill queue)
+```
+
+### Reading in another locale
+
+Read a model in a locale other than the request locale without mutating global state — the app
+locale is swapped for the closure and always restored afterwards (even on an exception):
+
+```php
+use RoundlyConsulting\Translatable\Facades\Translatable;
+
+$sk = Translatable::usingLocale('sk', fn (): string => $topic->name); // 'Investovanie'
+```
+
+### The `Translatable` facade
+
+The reusable toolkit is discoverable, injectable, and swappable in host tests via the `Translatable`
+facade over a bound `TranslationManager` (the static `Translations::…` helpers delegate to the same
+manager, so a swapped fake is observed everywhere):
+
+```php
+use RoundlyConsulting\Translatable\Facades\Translatable;
+
+$locales = Translatable::supported();                 // list<string>
+$map     = Translatable::fromInput($request->input('name'));
+$current = Translatable::currentLocale();
+$mode    = Translatable::fallbackMode();               // FallbackMode
+$fb      = Translatable::fallbackLocale();             // string
+
+// In a test:
+Translatable::swap($fakeManager);
+```
+
 ### Fallback modes
 
 The `FallbackMode` enum drives resolution:
@@ -231,6 +339,22 @@ public function withValidator(Validator $validator): void
 }
 ```
 
+Cap length or add custom per-locale value rules via the `each` parameter (applied to every
+locale of the field):
+
+```php
+...Translations::rules('name', required: true, each: ['max:120']);
+```
+
+For a model with a non-`id` primary key (uuid, custom, composite key column), pass its key name so
+uniqueness ignores the right row:
+
+```php
+new UniqueTranslatedSlug('topics', ignoreId: $record->getKey(), keyName: 'uuid');
+
+new UniqueSlugContext(input: $this->input('slug'), table: 'topics', ignoreId: $id, keyName: 'uuid');
+```
+
 Other `Translations` helpers:
 
 - `Translations::fromInput($input)` — normalise input into a locale map (a bare string becomes
@@ -239,6 +363,17 @@ Other `Translations` helpers:
   locales are touched.
 - `Translations::whereLike($query, new TranslationSearch(fields: ['name'], term: 'invest'))` —
   per-locale, case-insensitive search.
+
+### Missing-locale badge (Blade)
+
+Drop the "which locales are still missing" badge every admin form repeats into any Blade view:
+
+```blade
+<x-translatable-status :model="$topic" />
+```
+
+It renders each field's missing locales for a partial model, or a "complete" badge when the model
+is fully translated (respecting `translationStatusExcludes()`).
 
 ### Command
 
