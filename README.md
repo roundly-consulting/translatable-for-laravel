@@ -12,7 +12,7 @@ translatable slugs for Eloquent — native, with zero third-party dependencies.
 A single `json`/`jsonb` column stores a plain `{ "en": "…", "sk": "…" }` map per attribute.
 Reads return the current locale through a configurable fallback chain so content never renders
 blank; slugs are generated per locale and can be made unique per locale on PostgreSQL. This is
-the org-wide native replacement for `acme/laravel-translatable`.
+the org-wide native solution for multi-locale Eloquent attributes.
 
 ## Requirements
 
