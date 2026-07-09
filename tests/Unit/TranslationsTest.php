@@ -29,7 +29,8 @@ it('normalises a bare string to the current locale', function (): void {
     app()->setLocale('sk');
 
     expect(Translations::fromInput('Investovanie'))->toBe(['sk' => 'Investovanie'])
-        ->and(Translations::fromInput(''))->toBe([]);
+        ->and(Translations::fromInput(''))->toBe([])
+        ->and(Translations::currentLocale())->toBe('sk');
 });
 
 it('drops blank and unsupported locales from input', function (): void {
@@ -55,6 +56,14 @@ it('builds required rules that reject an all-blank map', function (): void {
     expect($validator->fails())->toBeTrue();
 });
 
+it('rejects a non-array value under required rules', function (): void {
+    $rules = Translations::rules('name', required: true);
+
+    $validator = Validator::make(['name' => 'not a map'], $rules);
+
+    expect($validator->fails())->toBeTrue();
+});
+
 it('accepts a partial map under required rules', function (): void {
     $rules = Translations::rules('name', required: true);
 
@@ -68,6 +77,25 @@ it('treats optional fields as sometimes-array', function (): void {
 
     expect($rules['description'])->toBe(['sometimes', 'array']);
     expect(Validator::make([], $rules)->fails())->toBeFalse();
+});
+
+it('appends extra per-locale rules to every locale value', function (): void {
+    $rules = Translations::rules('name', required: true, each: ['max:5']);
+
+    expect($rules['name.en'])->toBe(['nullable', 'string', 'max:5'])
+        ->and($rules['name.sk'])->toBe(['nullable', 'string', 'max:5']);
+
+    $tooLong = Validator::make(['name' => ['en' => 'Investing']], $rules);
+    $ok = Validator::make(['name' => ['en' => 'Inv']], $rules);
+
+    expect($tooLong->fails())->toBeTrue()
+        ->and($ok->fails())->toBeFalse();
+});
+
+it('keeps the default per-locale rules when no extras are given', function (): void {
+    $rules = Translations::rules('name', required: false);
+
+    expect($rules['name.en'])->toBe(['nullable', 'string']);
 });
 
 it('applies PATCH changes leaving untouched locales intact', function (): void {

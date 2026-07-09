@@ -6,16 +6,21 @@ namespace RoundlyConsulting\Translatable\Support;
 
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
-use RoundlyConsulting\Translatable\Contracts\SupportedLocales;
 use RoundlyConsulting\Translatable\Contracts\Translatable;
 use RoundlyConsulting\Translatable\DataTransferObjects\TranslationChanges;
 use RoundlyConsulting\Translatable\DataTransferObjects\TranslationSearch;
 
 /**
- * The reusable admin-input toolkit for locale-map fields.
+ * The reusable admin-input toolkit for locale-map fields. Each helper delegates to the bound
+ * TranslationManager so a swapped/mocked manager is observed everywhere (facade + trait + here).
  */
 final class Translations
 {
+    private static function manager(): TranslationManager
+    {
+        return app(TranslationManager::class);
+    }
+
     /**
      * The supported locales, from the bound SupportedLocales source of truth.
      *
@@ -23,12 +28,12 @@ final class Translations
      */
     public static function supported(): array
     {
-        return app(SupportedLocales::class)->supported();
+        return self::manager()->supported();
     }
 
     public static function currentLocale(): string
     {
-        return app()->getLocale();
+        return self::manager()->currentLocale();
     }
 
     /**
@@ -39,53 +44,20 @@ final class Translations
      */
     public static function fromInput(mixed $input): array
     {
-        if (is_string($input)) {
-            return $input === '' ? [] : [self::currentLocale() => $input];
-        }
-
-        if (! is_array($input)) {
-            return [];
-        }
-
-        $supported = self::supported();
-        $map = [];
-
-        foreach ($input as $locale => $value) {
-            $locale = (string) $locale;
-
-            if (! in_array($locale, $supported, true)) {
-                continue;
-            }
-
-            if (! is_string($value) || $value === '') {
-                continue;
-            }
-
-            $map[$locale] = $value;
-        }
-
-        return $map;
+        return self::manager()->fromInput($input);
     }
 
     /**
      * Validation rules for a locale-map field: the field itself plus each per-locale value.
-     * When required, at least one locale must be filled.
+     * When required, at least one locale must be filled. Extra `$each` rules (e.g. `max:120`)
+     * are appended to every per-locale value.
      *
+     * @param  array<int, mixed>  $each
      * @return array<string, array<int, mixed>>
      */
-    public static function rules(string $field, bool $required): array
+    public static function rules(string $field, bool $required, array $each = []): array
     {
-        $rules = [
-            $field => $required
-                ? array_merge(['required', 'array'], self::filledRule($field))
-                : ['sometimes', 'array'],
-        ];
-
-        foreach (self::supported() as $locale) {
-            $rules["{$field}.{$locale}"] = ['nullable', 'string'];
-        }
-
-        return $rules;
+        return self::manager()->rules($field, $required, $each);
     }
 
     /**
@@ -113,11 +85,7 @@ final class Translations
      */
     public static function apply(Translatable $model, TranslationChanges $changes): void
     {
-        foreach ($changes->fields as $field => $localeMap) {
-            foreach ($localeMap as $locale => $value) {
-                $model->setTranslation($field, (string) $locale, $value);
-            }
-        }
+        self::manager()->apply($model, $changes);
     }
 
     /**
@@ -128,16 +96,6 @@ final class Translations
      */
     public static function whereLike(Builder $query, TranslationSearch $search): Builder
     {
-        $operator = $query->getModel()->getConnection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
-        $term = '%'.$search->term.'%';
-        $locales = self::supported();
-
-        return $query->where(static function (Builder $inner) use ($search, $operator, $term, $locales): void {
-            foreach ($search->fields as $field) {
-                foreach ($locales as $locale) {
-                    $inner->orWhere("{$field}->{$locale}", $operator, $term);
-                }
-            }
-        });
+        return self::manager()->search($query, $search);
     }
 }
