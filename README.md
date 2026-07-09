@@ -50,7 +50,13 @@ return [
 
     // How far the fallback chain reaches. none = exact only; fallback = exact -> fallback
     // locale; any = exact -> fallback locale -> first available (content never renders blank).
+    // NOTE: `any` can surface a value from another locale when the requested + fallback
+    // locales are empty — a cross-locale disclosure. See "Fallback modes" below.
     'fallback' => FallbackMode::tryFrom((string) env('TRANSLATABLE_FALLBACK', 'any')) ?? FallbackMode::Any,
+
+    // Reject any locale key not in the supported list on writes (malformed keys are always
+    // rejected regardless). Off by default, so any well-formed locale is accepted.
+    'strict_locales' => (bool) env('TRANSLATABLE_STRICT_LOCALES', false),
 
     // Default supported locales. Hosts SHOULD rebind SupportedLocales to their own source.
     'locales' => ['en', 'sk'],
@@ -68,6 +74,7 @@ return [
 |-----|------|---------|-----|---------|
 | `fallback_locale` | `string` | `app.fallback_locale` / `en` | `TRANSLATABLE_FALLBACK_LOCALE` | Locale tried after the exact one. |
 | `fallback` | `FallbackMode` | `FallbackMode::Any` | `TRANSLATABLE_FALLBACK` (`none`/`fallback`/`any`) | How far the fallback chain reaches. |
+| `strict_locales` | `bool` | `false` | `TRANSLATABLE_STRICT_LOCALES` | Reject writes for locales outside the supported list. |
 | `locales` | `list<string>` | `['en', 'sk']` | — | Default supported locales. |
 | `slug.source_field` | `string` | `name` | — | Column slugs are generated from. |
 | `slug.separator` | `string` | `-` | — | Slug word separator. |
@@ -141,6 +148,24 @@ $topic->name = ['en' => 'Investing', 'sk' => 'Investovanie']; // replaces the ma
 
 Blank/`null` values are dropped, so a map never stores an empty string and the fallback chain
 always has something real to fall back to.
+
+### Locale keys are validated on write
+
+Every write path (`$model->name = [...]`, `setTranslation`, `setTranslations`, mass assignment)
+validates its locale **keys**. Malformed keys — anything with quotes, spaces, markup or SQL, e.g.
+a mass-assigned `name[<script>]=…` — are rejected with an `InvalidLocaleException`; values must be
+scalars (strings, or ints/floats cast to string), so a nested-array payload raises an
+`InvalidTranslationValueException` instead of being stored. Turn on `strict_locales` to also reject
+well-formed keys that aren't in your supported list.
+
+**Route raw request maps through `Translations::fromInput()`** — it drops unsupported and blank
+locales *before* they reach the model, so untrusted `$request->input('name')` never triggers a
+write-path exception:
+
+```php
+$topic->setTranslations('name', Translations::fromInput($request->input('name')));
+// or validate first with Translations::rules('name', required: true)
+```
 
 ### Serialization (`toArray` / `toJson` / API Resources)
 
@@ -258,6 +283,13 @@ The `FallbackMode` enum drives resolution:
 - `FallbackMode::Fallback` — exact, then the configured fallback locale.
 - `FallbackMode::Any` — exact, then fallback locale, then the first available value.
 
+> **Cross-locale disclosure with `Any` (the shipped default).** When both the requested and
+> fallback locales are empty, `Any` renders the **first available** locale's value — so content you
+> deliberately left untranslated for a locale can still appear in another language. If some content
+> is legally or compliance gated per locale, switch to `Fallback` (or `None`) globally via
+> `TRANSLATABLE_FALLBACK`/config, or per model with `$translatableFallbackMode`. `Any` is kept as
+> the default so content never renders blank; the tradeoff is this leak.
+
 Override per model:
 
 ```php
@@ -292,6 +324,13 @@ are the plain helpers behind the `translatableSlug()` / `translatable()` macros.
 is a no-op on non-PostgreSQL drivers, and a `NULL` (missing) locale is exempt so partial
 translations stay legal.
 
+> **Uniqueness is authoritative on PostgreSQL only.** The functional unique indexes are the real
+> guard. On other drivers there is no per-locale unique index, so uniqueness is **best-effort**:
+> generation avoids collisions at create time, and a create that loses a race is retried with the
+> next suffix, but two truly-concurrent writers can still mint the same slug. Use PostgreSQL where
+> per-locale slug uniqueness must be guaranteed. (Table/column names passed to `uniqueIndexes` and
+> the `translatable:slug-indexes` command are validated as plain identifiers before any DDL runs.)
+
 ### Translatable slugs
 
 `HasTranslatableSlug` generates a slug per locale on create from `slug.source_field`:
@@ -313,8 +352,20 @@ Resolve by slug:
 Topic::query()->whereLocaleSlug($slug)->first();  // request locale -> fallback-locale slug
 Topic::query()->whereAnySlug($slug)->first();      // any supported locale (stale-locale rescue)
 
-// Route model binding: id -> current-locale slug -> fallback slug -> any-locale slug
+// Route model binding: current-locale slug -> fallback slug -> any-locale slug
 Route::get('/topics/{topic:slug}', fn (Topic $topic) => $topic);
+```
+
+The scopes validate a request-supplied `$locale` and reject a non-translatable `$field`, so they
+are safe to hand `?locale=` straight from the request.
+
+By default route binding resolves **by slug only** — a numeric slug like `"2024"` is never shadowed
+by the record with id `2024`, and slug routes can't be enumerated by id. Opt into an id fallback
+(tried only *after* the slug misses) per model:
+
+```php
+// Resolve {topic:slug} by primary key when no slug matches.
+protected bool $resolveSlugBindingById = true;
 ```
 
 ### Admin validation
