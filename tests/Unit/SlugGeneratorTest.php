@@ -62,3 +62,19 @@ it('generates a random slug when the source slugifies to nothing', function () u
 
     expect($generator->generate('###', $never))->toMatch('/^[a-z0-9]{8}$/');
 });
+
+it('falls back to a random suffix after the sequential probe cap', function (): void {
+    // 'post' and 'post-2' .. 'post-51' are all taken; sequential probing must give up and
+    // append a random suffix rather than scanning unboundedly.
+    $generator = new SlugGenerator(slugOptions());
+
+    $slug = $generator->generate('Post', function (string $candidate): bool {
+        if ($candidate === 'post') {
+            return true;
+        }
+
+        return (bool) preg_match('/^post-([2-9]|[1-4][0-9]|5[01])$/', $candidate);
+    });
+
+    expect($slug)->toMatch('/^post-[a-z0-9]{8}$/');
+});

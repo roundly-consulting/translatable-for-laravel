@@ -90,6 +90,35 @@ it('rescues a stale-locale slug via whereAnySlug on pgsql', function (): void {
     expect($resolved?->id)->toBe($topic->id);
 });
 
+it('retries with the next suffix when a concurrent insert steals the slug', function (): void {
+    app()->setLocale('en');
+    config()->set('translatable.fallback_locale', 'en');
+
+    // Boot the model so the trait's slug-generation listener registers before the steal one.
+    new Topic;
+
+    // Simulate a TOCTOU race: after this model generates 'investing' but before its own
+    // insert, a competing writer commits the same slug. The unique index rejects the insert,
+    // and the trait must retry with the next free suffix.
+    Topic::creating(function (Topic $model): void {
+        $slug = $model->getTranslations('slug')['en'] ?? null;
+
+        if ($slug === 'investing' && DB::connection('pgsql')->table('topics')->where('slug->en', 'investing')->doesntExist()) {
+            DB::connection('pgsql')->table('topics')->insert([
+                'name' => json_encode(['en' => 'Stolen']),
+                'slug' => json_encode(['en' => 'investing']),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+    });
+
+    $topic = Topic::query()->create(['name' => ['en' => 'Investing']]);
+
+    expect($topic->getTranslations('slug')['en'])->toBe('investing-2')
+        ->and(Topic::query()->count())->toBe(2);
+});
+
 it('runs the slug-indexes command on pgsql', function (): void {
     Schema::connection('pgsql')->table('topics', function (Blueprint $table): void {
         //

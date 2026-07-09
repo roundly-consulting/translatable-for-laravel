@@ -13,6 +13,12 @@ use RoundlyConsulting\Translatable\DataTransferObjects\SlugOptions;
  */
 final readonly class SlugGenerator
 {
+    /**
+     * Cap sequential `-2, -3, …` probing before switching to a random suffix, so a seeded
+     * run of colliding slugs can't turn each create into an O(N) scan.
+     */
+    private const MAX_SEQUENTIAL_PROBES = 50;
+
     public function __construct(
         private SlugOptions $options,
     ) {}
@@ -51,17 +57,19 @@ final readonly class SlugGenerator
             return $base;
         }
 
-        $suffix = 2;
-
-        while (true) {
+        for ($suffix = 2; $suffix <= self::MAX_SEQUENTIAL_PROBES + 1; $suffix++) {
             $candidate = $base.$this->options->separator.$suffix;
 
             if ($this->available($candidate, $exists)) {
                 return $candidate;
             }
-
-            $suffix++;
         }
+
+        do {
+            $candidate = $base.$this->options->separator.$this->random();
+        } while (! $this->available($candidate, $exists));
+
+        return $candidate;
     }
 
     /**

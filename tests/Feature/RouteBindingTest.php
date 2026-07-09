@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use RoundlyConsulting\Translatable\Tests\Fixtures\IdResolvableTopic;
 use RoundlyConsulting\Translatable\Tests\Fixtures\Topic;
 
 beforeEach(function (): void {
@@ -40,12 +41,28 @@ it('rescues a stale-locale slug via whereAnySlug', function (): void {
     expect($resolved?->id)->toBe($topic->id);
 });
 
-it('resolves a numeric id', function (): void {
+it('does not fall back to the id by default', function (): void {
     $topic = Topic::query()->create(['name' => ['en' => 'Investing']]);
 
-    $resolved = (new Topic)->resolveRouteBinding((string) $topic->id, 'slug');
+    // The numeric value matches no slug, and id fallback is off by default → no resolution.
+    expect((new Topic)->resolveRouteBinding((string) $topic->id, 'slug'))->toBeNull();
+});
+
+it('resolves a numeric id only when the id fallback is opted in', function (): void {
+    $topic = IdResolvableTopic::query()->create(['name' => ['en' => 'Investing']]);
+
+    $resolved = (new IdResolvableTopic)->resolveRouteBinding((string) $topic->id, 'slug');
 
     expect($resolved?->id)->toBe($topic->id);
+});
+
+it('prefers a slug over the id when the id fallback is opted in', function (): void {
+    // A record whose slug is the literal "2024" must win over the record with id 2024.
+    $numericSlug = IdResolvableTopic::query()->create(['name' => ['en' => 'Year'], 'slug' => ['en' => '2024']]);
+
+    $resolved = (new IdResolvableTopic)->resolveRouteBinding('2024', 'slug');
+
+    expect($resolved?->id)->toBe($numericSlug->id);
 });
 
 it('returns null for an unknown slug', function (): void {
