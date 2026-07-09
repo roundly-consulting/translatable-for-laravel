@@ -6,9 +6,14 @@ namespace RoundlyConsulting\Translatable\Concerns;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use JsonException;
 use RoundlyConsulting\Translatable\Enums\FallbackMode;
+use RoundlyConsulting\Translatable\Exceptions\InvalidLocaleException;
+use RoundlyConsulting\Translatable\Exceptions\InvalidTranslationValueException;
 use RoundlyConsulting\Translatable\Exceptions\NotATranslatableAttributeException;
+use RoundlyConsulting\Translatable\Exceptions\TranslatableException;
 use RoundlyConsulting\Translatable\Support\FallbackResolver;
+use RoundlyConsulting\Translatable\Support\LocaleGuard;
 use RoundlyConsulting\Translatable\Support\Translations;
 use stdClass;
 
@@ -94,6 +99,7 @@ trait HasTranslations
     public function setTranslation(string $key, string $locale, ?string $value): static
     {
         $this->guardTranslatable($key);
+        $this->guardLocale($locale);
 
         $map = $this->readMap($key);
 
@@ -163,6 +169,8 @@ trait HasTranslations
 
     public function hasTranslation(string $key, ?string $locale = null): bool
     {
+        $this->guardTranslatable($key);
+
         $locale ??= $this->currentLocale();
 
         return array_key_exists($locale, $this->readMap($key));
@@ -173,6 +181,8 @@ trait HasTranslations
      */
     public function getTranslatedLocales(string $key): array
     {
+        $this->guardTranslatable($key);
+
         return array_keys($this->readMap($key));
     }
 
@@ -249,7 +259,7 @@ trait HasTranslations
      */
     public function scopeWhereLocale(Builder $query, string $field, string $value, ?string $locale = null): Builder
     {
-        $locale ??= $this->currentLocale();
+        $locale = $this->guardScope($field, $locale);
 
         return $query->where("{$field}->{$locale}", $value);
     }
@@ -262,7 +272,7 @@ trait HasTranslations
      */
     public function scopeWhereHasLocale(Builder $query, string $field, ?string $locale = null): Builder
     {
-        $locale ??= $this->currentLocale();
+        $locale = $this->guardScope($field, $locale);
 
         return $query->where(function (Builder $inner) use ($field, $locale): void {
             $inner->whereNotNull("{$field}->{$locale}")
@@ -278,7 +288,7 @@ trait HasTranslations
      */
     public function scopeWhereMissingLocale(Builder $query, string $field, ?string $locale = null): Builder
     {
-        $locale ??= $this->currentLocale();
+        $locale = $this->guardScope($field, $locale);
 
         return $query->where(function (Builder $inner) use ($field, $locale): void {
             $inner->whereNull("{$field}->{$locale}")
@@ -370,7 +380,9 @@ trait HasTranslations
         $map = [];
 
         foreach ($decoded as $locale => $value) {
-            if ($value === null || $value === '') {
+            // Skip nested arrays/objects that can't be represented as a locale string,
+            // rather than `(string)`-casting them into an "Array to string" warning.
+            if (! is_scalar($value) || $value === '') {
                 continue;
             }
 
@@ -382,25 +394,85 @@ trait HasTranslations
 
     /**
      * Write a locale map to the attribute as a plain JSON object, dropping blank values.
+     * Locale keys are validated (format, and supported-membership in strict mode) and values
+     * must be scalars — arrays/objects/booleans are rejected rather than silently coerced.
      *
-     * @param  array<string, string>  $map
+     * @param  array<string, mixed>  $map
      */
     protected function writeMap(string $key, array $map): void
     {
         $filtered = [];
 
         foreach ($map as $locale => $value) {
-            if ($value === '') {
+            $locale = (string) $locale;
+            $this->guardLocale($locale);
+
+            if ($value === null || $value === '') {
                 continue;
             }
 
-            $filtered[(string) $locale] = $value;
+            $filtered[$locale] = $this->normalizeTranslationValue($locale, $value);
         }
 
-        $this->attributes[$key] = json_encode(
-            $filtered === [] ? new stdClass : $filtered,
-            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
-        );
+        try {
+            $encoded = json_encode(
+                $filtered === [] ? new stdClass : $filtered,
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+            );
+        } catch (JsonException $exception) {
+            throw new TranslatableException(
+                "Failed to encode translations for [{$key}]: {$exception->getMessage()}",
+                previous: $exception,
+            );
+        }
+
+        $this->attributes[$key] = $encoded;
+    }
+
+    /**
+     * Coerce a single map value to the stored string form, allowing strings and casting
+     * int/float; anything else (arrays, objects, booleans, resources) is rejected.
+     */
+    private function normalizeTranslationValue(string $locale, mixed $value): string
+    {
+        if (is_string($value)) {
+            return $value;
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return (string) $value;
+        }
+
+        throw InvalidTranslationValueException::make($locale, get_debug_type($value));
+    }
+
+    /**
+     * Validate a locale key on a write path. Malformed keys are always rejected; when
+     * `translatable.strict_locales` is on, the key must also be a supported locale.
+     */
+    protected function guardLocale(string $locale): void
+    {
+        $strict = (bool) config('translatable.strict_locales', false);
+
+        LocaleGuard::ensure($locale, $strict, $strict ? Translations::supported() : null);
+    }
+
+    /**
+     * Validate a scope's field (must be translatable) and locale (must be well-formed),
+     * returning the effective locale. Keeps request-supplied `?locale=` values from ever
+     * reaching a `{$field}->{$locale}` JSON-path column expression unchecked.
+     */
+    protected function guardScope(string $field, ?string $locale): string
+    {
+        $this->guardTranslatable($field);
+
+        $locale ??= $this->currentLocale();
+
+        if (! LocaleGuard::isValid($locale)) {
+            throw InvalidLocaleException::forFormat($locale);
+        }
+
+        return $locale;
     }
 
     protected function guardTranslatable(string $key): void
