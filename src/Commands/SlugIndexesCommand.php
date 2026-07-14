@@ -6,7 +6,7 @@ namespace RoundlyConsulting\Translatable\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Schema;
-use RoundlyConsulting\Translatable\Enums\DatabaseDriver;
+use RoundlyConsulting\Translatable\Support\ConnectionDriver;
 use RoundlyConsulting\Translatable\Support\LocaleGuard;
 use RoundlyConsulting\Translatable\Support\TranslatableSlug;
 
@@ -37,7 +37,7 @@ final class SlugIndexesCommand extends Command
             return self::FAILURE;
         }
 
-        if (Schema::getConnection()->getDriverName() !== DatabaseDriver::Pgsql->value) {
+        if (! ConnectionDriver::isPgsql(Schema::getConnection())) {
             $this->warn('translatable:slug-indexes only runs on PostgreSQL; skipping.');
 
             return self::SUCCESS;

@@ -11,7 +11,6 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Validator;
 use RoundlyConsulting\Translatable\Contracts\SupportedLocales;
 use RoundlyConsulting\Translatable\DataTransferObjects\UniqueSlugContext;
-use RoundlyConsulting\Translatable\Enums\DatabaseDriver;
 
 /**
  * Migration/index helpers for per-locale translatable slugs, plus per-locale
@@ -41,7 +40,7 @@ final class TranslatableSlug
 
         $connection = Schema::getConnection();
 
-        if ($connection->getDriverName() !== DatabaseDriver::Pgsql->value) {
+        if (! ConnectionDriver::isPgsql($connection)) {
             return;
         }
 
