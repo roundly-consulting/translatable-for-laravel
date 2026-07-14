@@ -10,8 +10,8 @@ use RoundlyConsulting\Translatable\Contracts\Translatable;
 /**
  * Renders the "which locales are still missing" badge every admin form repeats, built on the
  * model's whole-model status. Usage: `<x-translatable-status :model="$topic" />`. Renders its
- * markup inline so the badge ships self-contained; publish the view (or wrap it in your own
- * Blade component) to customise the output.
+ * markup inline so the badge ships self-contained — there is no view to publish; wrap it in
+ * your own Blade component (or style the `translatable-status*` classes) to customise it.
  *
  * @property array<string, list<string>> $missing
  */

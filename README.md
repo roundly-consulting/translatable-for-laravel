@@ -19,6 +19,8 @@ the org-wide native solution for multi-locale Eloquent attributes.
 - PHP 8.4+
 - Laravel 12 or 13
 - `roundly-consulting/enums-for-laravel` (installed automatically) — backs the `FallbackMode` enum
+- `roundly-consulting/package-toolkit-for-laravel` (installed automatically) — the service-provider
+  builder, the `DatabaseDriver` enum, and the `LIKE` escaper behind the search helper
 - PostgreSQL is required only for **per-locale slug uniqueness** (functional unique indexes).
   Everything else works on any Laravel-supported database; the index helpers are a no-op off
   PostgreSQL.
@@ -419,7 +421,14 @@ Other `Translations` helpers:
 - `Translations::apply($model, new TranslationChanges([...]))` — PATCH-merge: only supplied
   locales are touched.
 - `Translations::whereLike($query, new TranslationSearch(fields: ['name'], term: 'invest'))` —
-  per-locale, case-insensitive search.
+  per-locale, case-insensitive search across the supported locales (`ilike` on PostgreSQL, `like`
+  everywhere else).
+
+  The term is treated as a **literal substring**: `%`, `_` and `\` are escaped, and the SQL states
+  its escape character explicitly, so a search for `100%` or `a_b` finds exactly those rows on
+  every driver — including SQLite and SQL Server, which have no default `LIKE` escape character.
+  The needle is always bound; only the searched field name (validated as a plain identifier)
+  reaches the SQL.
 
 ### Missing-locale badge (Blade)
 
@@ -446,6 +455,19 @@ php artisan translatable:slug-indexes topics --column=slug
 Values are stored as a plain `{ "en": "…", "sk": "…" }` JSON object — no vendor wrapper. Rows
 written by the hand-rolled "json cast + locale accessor" pattern read back identically, so
 there is **no data migration** when adopting this package.
+
+### `php artisan about`
+
+The package contributes a `Translatable` section reporting its shape — how many locales are
+configured and where they come from, the fallback mode, the strict-locale switch, and the slug
+bounds:
+
+```bash
+php artisan about --only=translatable
+```
+
+It reports **counts and switches, never values**: your locale list and your reserved slugs are
+never printed.
 
 ## Testing
 
