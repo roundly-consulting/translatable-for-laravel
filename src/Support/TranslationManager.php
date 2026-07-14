@@ -7,11 +7,12 @@ namespace RoundlyConsulting\Translatable\Support;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use RoundlyConsulting\PackageToolkit\Support\LikeEscaper;
+use RoundlyConsulting\PackageToolkit\Support\RawExpression;
 use RoundlyConsulting\Translatable\Contracts\SupportedLocales;
 use RoundlyConsulting\Translatable\Contracts\Translatable;
 use RoundlyConsulting\Translatable\DataTransferObjects\TranslationChanges;
 use RoundlyConsulting\Translatable\DataTransferObjects\TranslationSearch;
-use RoundlyConsulting\Translatable\Enums\DatabaseDriver;
 use RoundlyConsulting\Translatable\Enums\FallbackMode;
 
 /**
@@ -138,18 +139,26 @@ class TranslationManager
      */
     public function search(Builder $query, TranslationSearch $search): Builder
     {
-        $operator = $query->getModel()->getConnection()->getDriverName() === DatabaseDriver::Pgsql->value ? 'ilike' : 'like';
+        $operator = ConnectionDriver::isPgsql($query->getModel()->getConnection()) ? 'ilike' : 'like';
         // Escape LIKE wildcards so a term like "100%" scopes the (bound) match instead of
         // matching everything; the value stays bound, this only neutralises %/_/\ meaning.
-        $term = '%'.addcslashes($search->term, '%_\\').'%';
+        $term = '%'.LikeEscaper::escape($search->term).'%';
+        $grammar = $query->getQuery()->getGrammar();
         $locales = $this->supported();
 
-        return $query->where(static function (Builder $inner) use ($search, $operator, $term, $locales): void {
+        return $query->where(static function (Builder $inner) use ($search, $operator, $term, $locales, $grammar): void {
             foreach ($search->fields as $field) {
                 LocaleGuard::ensureIdentifier($field, 'search field');
 
                 foreach ($locales as $locale) {
-                    $inner->orWhere("{$field}->".LocaleGuard::ensure($locale), $operator, $term);
+                    // The escape character MUST be stated explicitly: SQLite (and SQL Server)
+                    // have no default LIKE escape character, so without it the escaping
+                    // backslashes above stay literal and the term matches nothing. Only the
+                    // grammar-wrapped, allowlisted identifier reaches the SQL; the needle and
+                    // the escape character are bound.
+                    $column = $grammar->wrap("{$field}->".LocaleGuard::ensure($locale));
+
+                    $inner->whereRaw(new RawExpression("{$column} {$operator} ? escape ?"), [$term, '\\'], 'or');
                 }
             }
         });
