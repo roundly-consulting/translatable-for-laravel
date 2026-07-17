@@ -21,27 +21,16 @@ jobs:
 
     name: P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.stability }} - ${{ matrix.os }}
 
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: translatable_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      TRANSLATABLE_PGSQL_HOST: 127.0.0.1
-      TRANSLATABLE_PGSQL_PORT: 5432
-      TRANSLATABLE_PGSQL_DATABASE: translatable_test
-      TRANSLATABLE_PGSQL_USERNAME: postgres
-      TRANSLATABLE_PGSQL_PASSWORD: postgres
+    # No postgres service here any more. This job used to run one, with a job-level
+    # TRANSLATABLE_PGSQL_* convention local to this package, so that a handful of
+    # pgsql-gated cases could run inside the sqlite job. That work now belongs to the
+    # test-pgsql leg below, on the fleet-standard TESTING_DB_* vars — the postgres-gated
+    # cases skip here, visibly, and run there.
+    #
+    # Keeping the sqlite job is not a formality: bug #39 (a LIKE with no ESCAPE clause) is
+    # GREEN on postgres and matches nothing on sqlite. Re-measured on this row by
+    # re-introducing it verbatim — sqlite 4 failed, postgres 6 passed. Sqlite is the leg
+    # that catches this package's own famous bug.
 
     steps:
       - name: Checkout code
@@ -51,7 +40,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, pgsql, pdo_pgsql, bcmath, soap, intl, fileinfo, openssl
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, fileinfo, openssl
           coverage: pcov
 
       - name: Setup problem matchers
@@ -71,3 +60,110 @@ jobs:
 
       - name: Execute tests
         run: vendor/bin/pest --coverage --min=90
+
+  test-pgsql:
+    runs-on: ubuntu-latest
+    name: P8.4 - pgsql real-engine
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: testing
+          POSTGRES_USER: testing
+          POSTGRES_PASSWORD: secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.4
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, pgsql, pdo_pgsql, bcmath, soap, intl, fileinfo, openssl
+          coverage: none
+
+      - name: Install dependencies
+        env:
+          COMPOSER_AUTH: '{"github-oauth":{"github.com":"${{ secrets.COMPOSER_AUTH_TOKEN }}"}}'
+        run: composer update --prefer-stable --prefer-dist --no-interaction
+
+      - name: Execute tests against postgres
+        env:
+          # TESTING_DB_DRIVER is what moves the suite off sqlite. The location vars alone
+          # only say where the engine is; without the driver this job would run every test on
+          # sqlite and call itself a postgres leg. It also replaces this package's old
+          # TRANSLATABLE_PGSQL_* convention, which asked whether the vars were SET rather
+          # than whether an engine could be REACHED.
+          #
+          # This is the leg that owns the postgres-only surface: the functional per-locale
+          # unique slug indexes, the `ilike` branch, and real `jsonb` columns.
+          TESTING_DB_DRIVER: pgsql
+          TESTING_DB_HOST: 127.0.0.1
+          TESTING_DB_PORT: 5432
+          TESTING_DB_DATABASE: testing
+          TESTING_DB_USERNAME: testing
+          TESTING_DB_PASSWORD: secret
+        # Coverage is enforced on the sqlite matrix; this is a correctness leg.
+        run: vendor/bin/pest --ci
+
+  test-mysql:
+    runs-on: ubuntu-latest
+    name: P8.4 - mysql real-engine
+
+    # The third engine, and the one this package cannot do without. Translatable branches on
+    # `ConnectionDriver::isPgsql()`, so everything that is not postgres takes the `like`
+    # branch — and until this leg existed, "not postgres" was only ever proven against
+    # sqlite. MySQL and sqlite share that branch but disagree about it: sqlite has NO default
+    # LIKE escape character, MySQL has one. So the branch was only ever tested on the more
+    # forgiving of the two engines that use it, and the `jsonb()` macro's non-postgres
+    # mapping was likewise only ever seen by sqlite.
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_DATABASE: testing
+          MYSQL_USER: testing
+          MYSQL_PASSWORD: secret
+          MYSQL_ROOT_PASSWORD: secret
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.4
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, mysql, pdo_mysql, bcmath, soap, intl, fileinfo, openssl
+          coverage: none
+
+      - name: Install dependencies
+        env:
+          COMPOSER_AUTH: '{"github-oauth":{"github.com":"${{ secrets.COMPOSER_AUTH_TOKEN }}"}}'
+        run: composer update --prefer-stable --prefer-dist --no-interaction
+
+      - name: Execute tests against mysql
+        env:
+          TESTING_DB_DRIVER: mysql
+          TESTING_DB_HOST: 127.0.0.1
+          TESTING_DB_PORT: 3306
+          TESTING_DB_DATABASE: testing
+          TESTING_DB_USERNAME: testing
+          TESTING_DB_PASSWORD: secret
+        run: vendor/bin/pest --ci

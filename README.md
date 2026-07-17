@@ -475,8 +475,25 @@ never printed.
 composer test
 ```
 
-The PostgreSQL slug-uniqueness suite runs when `TRANSLATABLE_PGSQL_*` env vars point at a test
-database (host, port, database, username, password); otherwise it skips with a note.
+The suite runs on SQLite by default. Point it at a real engine with the standard
+`TESTING_DB_*` vars — `TESTING_DB_DRIVER` is the one that actually moves it:
+
+```bash
+TESTING_DB_DRIVER=pgsql TESTING_DB_HOST=127.0.0.1 TESTING_DB_PORT=5432 \
+  TESTING_DB_DATABASE=testing TESTING_DB_USERNAME=testing TESTING_DB_PASSWORD=secret \
+  vendor/bin/pest
+```
+
+CI runs all three engines, and each one earns its place:
+
+| Leg | What only it can catch |
+|---|---|
+| **sqlite** | a `LIKE` with no `ESCAPE` clause. SQLite has no default LIKE escape character, so an unescaped term matches **nothing** — while the same code is green on PostgreSQL and MySQL. This package shipped exactly that bug. |
+| **pgsql** | the PostgreSQL-only surface: the functional per-locale unique slug indexes, the `ilike` path, real `jsonb` columns. |
+| **mysql** | the `like` branch on a real server. Everything that is not PostgreSQL takes that branch, so without this leg "not PostgreSQL" was only ever proven against SQLite — the one engine that disagrees with MySQL about escaping. |
+
+The PostgreSQL-only cases skip visibly when no engine is reachable, so a run that asserts
+nothing cannot report green.
 
 ## Changelog
 
