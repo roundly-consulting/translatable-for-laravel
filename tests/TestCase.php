@@ -6,45 +6,40 @@ namespace RoundlyConsulting\Translatable\Tests;
 
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
-use Orchestra\Testbench\TestCase as Orchestra;
+use Illuminate\Support\ServiceProvider;
+use RoundlyConsulting\Testing\PackageTestCase;
 use RoundlyConsulting\Translatable\TranslatableServiceProvider;
 
-abstract class TestCase extends Orchestra
+abstract class TestCase extends PackageTestCase
 {
     /**
-     * @return array<int, class-string>
+     * Every provider translatable hard-requires, in registration order. A host
+     * auto-discovers these; the suite must list them or the test environment is a fiction.
+     *
+     * @return list<class-string<ServiceProvider>>
      */
-    protected function getPackageProviders($app): array
+    protected function packageProviders(): array
     {
         return [TranslatableServiceProvider::class];
     }
 
-    protected function defineEnvironment($app): void
+    /**
+     * Translatable ships NO migrations — it adds `jsonb` columns to the HOST's tables via
+     * the Blueprint macros, so there is nothing to load here. The fixture tables below are
+     * built per-test by the cases that need them, on whatever connection is under test.
+     *
+     * @return list<class-string<ServiceProvider>|string>
+     */
+    protected function migrationSources(): array
     {
-        $app['config']->set('database.default', 'sqlite');
-        $app['config']->set('database.connections.sqlite', [
-            'driver' => 'sqlite',
-            'database' => ':memory:',
-            'prefix' => '',
-            'foreign_key_constraints' => true,
-        ]);
-
-        if (pgsqlConfigured()) {
-            $app['config']->set('database.connections.pgsql', [
-                'driver' => 'pgsql',
-                'host' => env('TRANSLATABLE_PGSQL_HOST', '127.0.0.1'),
-                'port' => env('TRANSLATABLE_PGSQL_PORT', '5432'),
-                'database' => env('TRANSLATABLE_PGSQL_DATABASE', 'translatable_test'),
-                'username' => env('TRANSLATABLE_PGSQL_USERNAME', 'postgres'),
-                'password' => env('TRANSLATABLE_PGSQL_PASSWORD', ''),
-                'charset' => 'utf8',
-                'prefix' => '',
-                'search_path' => 'public',
-                'sslmode' => 'prefer',
-            ]);
-        }
+        return [];
     }
 
+    /**
+     * The `topics` fixture: three translatable `jsonb` columns. Created on the DEFAULT
+     * connection, which `DriverMatrix` points at whatever `TESTING_DB_DRIVER` names — so
+     * this same helper builds the table on sqlite, postgres or mysql without a branch.
+     */
     protected function createTopicsTable(): void
     {
         Schema::dropIfExists('topics');
