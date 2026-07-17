@@ -1,6 +1,6 @@
 {
     "name": "roundly-consulting/translatable-for-laravel",
-    "description": "Locale-map (jsonb) translatable attributes, a fallback chain, and per-locale unique translatable slugs for Eloquent \u2014 native, zero third-party deps.",
+    "description": "Locale-map (jsonb) translatable attributes, a fallback chain, and per-locale unique translatable slugs for Eloquent — native, zero third-party deps.",
     "keywords": [
         "roundly-consulting",
         "laravel",
@@ -37,7 +37,8 @@
         "nunomaduro/collision": "^8.0",
         "orchestra/testbench": "^10.0|^11.0",
         "pestphp/pest": "^4.0",
-        "pestphp/pest-plugin-laravel": "^4.0"
+        "pestphp/pest-plugin-laravel": "^4.0",
+        "roundly-consulting/testing-for-laravel": "@dev"
     },
     "repositories": [
         {
@@ -62,6 +63,18 @@
         {
             "type": "vcs",
             "url": "https://github.com/roundly-consulting/package-toolkit-for-laravel",
+            "no-api": true
+        },
+        {
+            "type": "path",
+            "url": "../testing-for-laravel*",
+            "options": {
+                "symlink": true
+            }
+        },
+        {
+            "type": "vcs",
+            "url": "https://github.com/roundly-consulting/testing-for-laravel",
             "no-api": true
         }
     ],
