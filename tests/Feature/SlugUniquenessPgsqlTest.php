@@ -13,7 +13,7 @@ pest()->group('pgsql');
 
 beforeEach(function (): void {
     if (! pgsqlConfigured()) {
-        $this->markTestSkipped('Set TRANSLATABLE_PGSQL_* to run the PostgreSQL slug-uniqueness lane.');
+        $this->markTestSkipped('No PostgreSQL connection available; run the test-pgsql leg (TESTING_DB_DRIVER=pgsql).');
     }
 
     config()->set('database.default', 'pgsql');
