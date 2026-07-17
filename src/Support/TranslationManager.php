@@ -139,26 +139,45 @@ class TranslationManager
      */
     public function search(Builder $query, TranslationSearch $search): Builder
     {
-        $operator = ConnectionDriver::isPgsql($query->getModel()->getConnection()) ? 'ilike' : 'like';
+        $isPgsql = ConnectionDriver::isPgsql($query->getModel()->getConnection());
         // Escape LIKE wildcards so a term like "100%" scopes the (bound) match instead of
         // matching everything; the value stays bound, this only neutralises %/_/\ meaning.
         $term = '%'.LikeEscaper::escape($search->term).'%';
         $grammar = $query->getQuery()->getGrammar();
         $locales = $this->supported();
 
-        return $query->where(static function (Builder $inner) use ($search, $operator, $term, $locales, $grammar): void {
+        return $query->where(static function (Builder $inner) use ($search, $isPgsql, $term, $locales, $grammar): void {
             foreach ($search->fields as $field) {
                 LocaleGuard::ensureIdentifier($field, 'search field');
 
                 foreach ($locales as $locale) {
-                    // The escape character MUST be stated explicitly: SQLite (and SQL Server)
-                    // have no default LIKE escape character, so without it the escaping
-                    // backslashes above stay literal and the term matches nothing. Only the
-                    // grammar-wrapped, allowlisted identifier reaches the SQL; the needle and
-                    // the escape character are bound.
+                    // Only the grammar-wrapped, allowlisted identifier reaches the SQL; the
+                    // needle and the escape character are bound.
                     $column = $grammar->wrap("{$field}->".LocaleGuard::ensure($locale));
 
-                    $inner->whereRaw(new RawExpression("{$column} {$operator} ? escape ?"), [$term, '\\'], 'or');
+                    // Two driver-specific requirements, both of which are invisible on the
+                    // engine that does not need them:
+                    //
+                    // 1. The escape character MUST be stated explicitly. SQLite (and SQL
+                    //    Server) have no default LIKE escape character, so without it the
+                    //    escaping backslashes above stay literal and the term matches
+                    //    nothing. Green on postgres and mysql, zero rows on sqlite — this
+                    //    package shipped exactly that (#39).
+                    //
+                    // 2. Case-insensitivity has to be MADE to happen off postgres. `ilike`
+                    //    is case-insensitive by definition; plain `like` is not, and whether
+                    //    it behaves that way is a property of the COLLATION, not of LIKE.
+                    //    SQLite's like is ASCII-case-insensitive by default, so it flattered
+                    //    this code for the package's whole life — but MySQL extracts JSON as
+                    //    utf8mb4_bin, which is case-SENSITIVE, so a documented
+                    //    case-insensitive search returned ZERO rows there. Lowering both
+                    //    sides states the intent in the SQL rather than inheriting it from
+                    //    whichever engine happens to be underneath.
+                    $expression = $isPgsql
+                        ? "{$column} ilike ? escape ?"
+                        : "lower({$column}) like lower(?) escape ?";
+
+                    $inner->whereRaw(new RawExpression($expression), [$term, '\\'], 'or');
                 }
             }
         });

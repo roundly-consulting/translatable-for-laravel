@@ -91,6 +91,41 @@ it('treats wildcards in a search term as literals on the configured engine', fun
 });
 
 /**
+ * The case-insensitivity contract, on whatever engine the leg configured.
+ *
+ * `TranslationManager::search()` documents itself as "a per-locale, CASE-INSENSITIVE search",
+ * and that promise used to be inherited from the engine rather than stated in the SQL:
+ * `ilike` is case-insensitive by definition, and SQLite's `like` is ASCII-case-insensitive by
+ * default, so postgres and sqlite both flattered the code. MySQL does not — it extracts JSON
+ * as `utf8mb4_bin`, a case-SENSITIVE collation — so `search('COTTON')` returned **zero rows**
+ * there, on a package whose entire job is searching translated text.
+ *
+ * That is #39's shape exactly (a search silently matching nothing on one engine while green
+ * on the others), which is the argument for the third leg in one test: two engines agreeing
+ * is not evidence when they agree by coincidence.
+ *
+ * Every case here asserts BOTH that the term finds the row it should AND that it does not
+ * widen — a `lower()` on both sides must not turn into a match-everything.
+ */
+it('searches case-insensitively on the configured engine', function (): void {
+    Topic::query()->create(['name' => ['en' => '100% cotton shirt']]);
+    Topic::query()->create(['name' => ['en' => 'COTTON canvas bag']]);
+    Topic::query()->create(['name' => ['en' => 'linen towel']]);
+
+    $search = static fn (string $term): array => Translations::whereLike(
+        Topic::query(),
+        new TranslationSearch(fields: ['name'], term: $term),
+    )->get()->map(static fn (Topic $t): string => (string) $t->getTranslation('name', 'en'))->all();
+
+    // Upper term finds the lower row, lower term finds the upper row, and both find both.
+    expect($search('COTTON'))->toHaveCount(2)
+        ->and($search('cotton'))->toHaveCount(2)
+        ->and($search('CoTtOn'))->toHaveCount(2)
+        // ...and case-insensitivity has not quietly become match-everything.
+        ->and($search('linen'))->toBe(['linen towel']);
+});
+
+/**
  * `jsonb()` is a Blueprint macro this package ships. Postgres maps it to a real `jsonb`
  * column; every other driver gets `json`. Asserting the column is USABLE (a translated write
  * and read back) on whatever engine the leg configured is what proves the macro resolved to
