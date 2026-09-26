@@ -7,6 +7,7 @@ namespace RoundlyConsulting\Translatable\Tests;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
+use RoundlyConsulting\Sluggable\SluggableServiceProvider;
 use RoundlyConsulting\Testing\PackageTestCase;
 use RoundlyConsulting\Translatable\TranslatableServiceProvider;
 
@@ -20,7 +21,7 @@ abstract class TestCase extends PackageTestCase
      */
     protected function packageProviders(): array
     {
-        return [TranslatableServiceProvider::class];
+        return [SluggableServiceProvider::class, TranslatableServiceProvider::class];
     }
 
     /**

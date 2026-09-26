@@ -9,10 +9,12 @@ use Illuminate\Database\Schema\ColumnDefinition;
 use Illuminate\Support\Facades\Blade;
 use RoundlyConsulting\PackageToolkit\Package;
 use RoundlyConsulting\PackageToolkit\PackageServiceProvider;
+use RoundlyConsulting\Sluggable\Contracts\SlugLocales;
 use RoundlyConsulting\Translatable\Commands\SlugIndexesCommand;
 use RoundlyConsulting\Translatable\Contracts\SupportedLocales;
 use RoundlyConsulting\Translatable\Support\ConfigSupportedLocales;
 use RoundlyConsulting\Translatable\Support\TranslatableSlug;
+use RoundlyConsulting\Translatable\Support\TranslatableSlugLocales;
 use RoundlyConsulting\Translatable\Support\TranslationManager;
 use RoundlyConsulting\Translatable\View\Components\TranslationStatus;
 
@@ -36,6 +38,11 @@ final class TranslatableServiceProvider extends PackageServiceProvider
 
         $this->app->bind(SupportedLocales::class, ConfigSupportedLocales::class);
         $this->app->singleton(TranslationManager::class);
+
+        // One locale source of truth for slugs and translations. sluggable registers its
+        // config default with bindIf(), so this wins in either provider order; a host binding
+        // in a later provider wins over both.
+        $this->app->bind(SlugLocales::class, TranslatableSlugLocales::class);
 
         // Registered here rather than in boot(): the macros must exist before anything can
         // build a schema with them, and a host's migration may run against a provider that

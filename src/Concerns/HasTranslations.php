@@ -302,6 +302,36 @@ trait HasTranslations
     }
 
     /**
+     * sluggable's locale-map seam: every translatable attribute is a locale map.
+     */
+    public function isLocaleMapAttribute(string $key): bool
+    {
+        return $this->isTranslatableAttribute($key);
+    }
+
+    /**
+     * The raw locale map of a translatable attribute (blank values dropped) — never the
+     * current-locale string `getAttribute()` resolves to.
+     *
+     * @return array<string, string>
+     */
+    public function getLocaleMap(string $key): array
+    {
+        return $this->getTranslations($key);
+    }
+
+    /**
+     * Replace a translatable attribute's locale map through the guarded write path, so every
+     * sluggable write keeps locale-key validation and `strict_locales` enforcement.
+     *
+     * @param  array<string, string>  $map
+     */
+    public function setLocaleMap(string $key, array $map): static
+    {
+        return $this->setTranslations($key, $map);
+    }
+
+    /**
      * Translatable attributes counted for whole-model status, minus the excluded ones.
      *
      * @return list<string>

@@ -1,13 +1,12 @@
 {
     "name": "roundly-consulting/translatable-for-laravel",
-    "description": "Locale-map (jsonb) translatable attributes, a fallback chain, and per-locale unique translatable slugs for Eloquent — native, zero third-party deps.",
+    "description": "Locale-map (jsonb) translatable attributes with a fallback chain for Eloquent; per-locale slugs via sluggable-for-laravel — native, zero third-party deps.",
     "keywords": [
         "roundly-consulting",
         "laravel",
         "translatable",
         "localization",
         "i18n",
-        "slug",
         "jsonb"
     ],
     "homepage": "https://github.com/roundly-consulting/translatable-for-laravel",
@@ -29,7 +28,8 @@
         "illuminate/view": "^12.0|^13.0",
         "php": "^8.4",
         "roundly-consulting/enums-for-laravel": "@dev",
-        "roundly-consulting/package-toolkit-for-laravel": "@dev"
+        "roundly-consulting/package-toolkit-for-laravel": "@dev",
+        "roundly-consulting/sluggable-for-laravel": "@dev"
     },
     "require-dev": {
         "larastan/larastan": "^3.0",
@@ -75,6 +75,18 @@
         {
             "type": "vcs",
             "url": "https://github.com/roundly-consulting/testing-for-laravel",
+            "no-api": true
+        },
+        {
+            "type": "path",
+            "url": "../sluggable-for-laravel*",
+            "options": {
+                "symlink": true
+            }
+        },
+        {
+            "type": "vcs",
+            "url": "https://github.com/roundly-consulting/sluggable-for-laravel",
             "no-api": true
         }
     ],

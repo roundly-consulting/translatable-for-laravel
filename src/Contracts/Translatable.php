@@ -4,13 +4,19 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Translatable\Contracts;
 
+use RoundlyConsulting\Sluggable\Contracts\ProvidesLocaleMaps;
+
 /**
  * The public translation API a model gains from the HasTranslations trait.
  *
  * Consumer models `implements Translatable` so the support classes (Translations::apply,
  * validation helpers, …) can type-hint against the surface without touching Eloquent internals.
+ *
+ * It extends sluggable's ProvidesLocaleMaps, so sluggable reads and writes translatable
+ * attributes (per-locale slugs, locale-map sources) through this model's own guarded write
+ * path — the dependency points translatable → sluggable, never back.
  */
-interface Translatable
+interface Translatable extends ProvidesLocaleMaps
 {
     public function getTranslation(string $key, ?string $locale = null, bool $useFallback = true): ?string;
 

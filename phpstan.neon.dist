@@ -12,6 +12,7 @@ parameters:
         - tests/Fixtures/StrictTopic.php
         - tests/Fixtures/EventfulTopic.php
         - tests/Fixtures/KeyedRecord.php
+        - tests/Fixtures/SluggedTopic.php
     # This package ships its own config/ dir; env() is correct there.
     configDirectories:
         - config
