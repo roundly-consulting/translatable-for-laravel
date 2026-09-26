@@ -6,8 +6,10 @@ use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Support\Facades\Route;
 use RoundlyConsulting\Sluggable\Contracts\ProvidesLocaleMaps;
 use RoundlyConsulting\Sluggable\Contracts\SlugLocales;
+use RoundlyConsulting\Sluggable\DataTransferObjects\SlugIndexSpec;
 use RoundlyConsulting\Sluggable\Exceptions\InvalidSlugDefinitionException;
 use RoundlyConsulting\Sluggable\Facades\Slugs;
+use RoundlyConsulting\Sluggable\Schema\SlugIndexes;
 use RoundlyConsulting\Sluggable\SluggableServiceProvider;
 use RoundlyConsulting\Sluggable\Support\ConfigSlugLocales;
 use RoundlyConsulting\Translatable\Contracts\SupportedLocales;
@@ -182,4 +184,27 @@ describe('the SlugLocales binding', function (): void {
 
         expect(app(SlugLocales::class))->toBeInstanceOf(ConfigSlugLocales::class);
     });
+
+    it('treats an unset fallback locale as no fallback, so slug lookups keep working', function (): void {
+        // `null` is a state the about section reports as DEFAULT; sluggable's contract spells
+        // "no fallback" as null, and an empty string reached its JSON-path guard and threw.
+        config()->set('translatable.fallback_locale', null);
+
+        $topic = SluggedTopic::query()->create(['name' => ['en' => 'Investing', 'sk' => 'Investovanie']]);
+
+        app()->setLocale('sk');
+
+        expect(app(SlugLocales::class)->fallback())->toBeNull()
+            ->and(SluggedTopic::query()->whereSlug('investovanie')->first()?->id)->toBe($topic->id)
+            ->and(SluggedTopic::findBySlug('investing')?->id)->toBe($topic->id)
+            ->and((new SluggedTopic)->resolveRouteBinding('investovanie')?->id)->toBe($topic->id);
+    });
+
+    it('refuses a malformed supported locale before it reaches index DDL', function (): void {
+        // The removed TranslatableSlug::uniqueIndexes() allowlisted every locale before its DDL;
+        // sluggable reads the list from this adapter when a spec names none.
+        config()->set('translatable.locales', ['en', "sk'); drop table topics; --"]);
+
+        SlugIndexes::plan(SlugIndexSpec::localeMap('topics', 'slug'));
+    })->throws(InvalidLocaleException::class);
 });
