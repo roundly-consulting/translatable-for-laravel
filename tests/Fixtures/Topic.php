@@ -6,7 +6,6 @@ namespace RoundlyConsulting\Translatable\Tests\Fixtures;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use RoundlyConsulting\Translatable\Concerns\HasTranslatableSlug;
 use RoundlyConsulting\Translatable\Concerns\HasTranslations;
 use RoundlyConsulting\Translatable\Contracts\Translatable;
 
@@ -15,7 +14,6 @@ use RoundlyConsulting\Translatable\Contracts\Translatable;
  */
 final class Topic extends Model implements Translatable
 {
-    use HasTranslatableSlug;
     use HasTranslations;
     use SoftDeletes;
 

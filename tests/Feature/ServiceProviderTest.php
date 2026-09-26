@@ -6,7 +6,6 @@ use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Database\Migrations\Migrator;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\ServiceProvider;
-use RoundlyConsulting\Translatable\Commands\SlugIndexesCommand;
 use RoundlyConsulting\Translatable\Contracts\SupportedLocales;
 use RoundlyConsulting\Translatable\Enums\FallbackMode;
 use RoundlyConsulting\Translatable\Support\ConfigSupportedLocales;
@@ -14,7 +13,8 @@ use RoundlyConsulting\Translatable\Support\ConfigSupportedLocales;
 it('merges the package config with sensible defaults', function (): void {
     expect(config('translatable.locales'))->toBe(['en', 'sk'])
         ->and(config('translatable.fallback'))->toBe(FallbackMode::Any)
-        ->and(config('translatable.slug.source_field'))->toBe('name');
+        ->and(config('translatable.strict_locales'))->toBeFalse()
+        ->and(config('translatable.slug'))->toBeNull();
 });
 
 it('binds the default SupportedLocales implementation', function (): void {
@@ -22,16 +22,18 @@ it('binds the default SupportedLocales implementation', function (): void {
         ->and(app(SupportedLocales::class)->supported())->toBe(['en', 'sk']);
 });
 
-it('registers the slug-indexes command', function (): void {
-    $commands = app(Kernel::class)->all();
+it('registers no commands of its own', function (): void {
+    $ours = array_filter(
+        array_keys(app(Kernel::class)->all()),
+        static fn (string $name): bool => str_starts_with($name, 'translatable:'),
+    );
 
-    expect($commands)->toHaveKey('translatable:slug-indexes')
-        ->and($commands['translatable:slug-indexes'])->toBeInstanceOf(SlugIndexesCommand::class);
+    expect($ours)->toBe([]);
 });
 
-it('registers the blueprint macros', function (): void {
+it('registers the translatable blueprint macro and no slug macro', function (): void {
     expect(Blueprint::hasMacro('translatable'))->toBeTrue()
-        ->and(Blueprint::hasMacro('translatableSlug'))->toBeTrue();
+        ->and(Blueprint::hasMacro('translatableSlug'))->toBeFalse();
 });
 
 it('exposes the publish groups', function (): void {

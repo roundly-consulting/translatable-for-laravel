@@ -104,8 +104,9 @@ jobs:
           # TRANSLATABLE_PGSQL_* convention, which asked whether the vars were SET rather
           # than whether an engine could be REACHED.
           #
-          # This is the leg that owns the postgres-only surface: the functional per-locale
-          # unique slug indexes, the `ilike` branch, and real `jsonb` columns.
+          # This is the leg that owns the postgres-only surface: the `ilike` branch and real
+          # `jsonb` columns (plus sluggable's per-locale slugs over them, via the integration
+          # suite).
           TESTING_DB_DRIVER: pgsql
           TESTING_DB_HOST: 127.0.0.1
           TESTING_DB_PORT: 5432

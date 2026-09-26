@@ -3,12 +3,10 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use RoundlyConsulting\PackageToolkit\Enums\DatabaseDriver;
 use RoundlyConsulting\Testing\Database\DriverMatrix;
 use RoundlyConsulting\Translatable\DataTransferObjects\TranslationSearch;
 use RoundlyConsulting\Translatable\Support\ConnectionDriver;
-use RoundlyConsulting\Translatable\Support\TranslatableSlug;
 use RoundlyConsulting\Translatable\Support\Translations;
 use RoundlyConsulting\Translatable\Tests\Fixtures\Topic;
 
@@ -53,7 +51,7 @@ it('runs on the driver the environment declares', function (): void {
 /**
  * The package's own driver discrimination must agree with the engine on the wire. This is
  * the branch every divergent path in the package hangs off (`isPgsql() ? 'ilike' : 'like'`,
- * the functional slug indexes, the jsonb column type) — if it were ever wrong, every one of
+ * the jsonb column type) — if it were ever wrong, every one of
  * them would be wrong at once, and on SQLite the mistake is invisible because the `like`
  * branch is also the SQLite branch.
  */
@@ -142,31 +140,4 @@ it('round-trips a translated jsonb column on the configured engine', function ()
     expect($fresh->getTranslation('name', 'en'))->toBe('Hello')
         ->and($fresh->getTranslation('name', 'sk'))->toBe('Ahoj')
         ->and($fresh->getTranslation('description', 'en'))->toBe('A greeting');
-});
-
-/**
- * The functional per-locale unique indexes are Postgres-only by design — `TranslatableSlug`
- * returns early on any other driver. Both halves are pinned on the driver the leg is running,
- * so the mysql and sqlite legs prove the guard really no-ops rather than throwing, and the
- * pgsql leg proves the indexes really appear. Without the mysql leg the "no-op" half was only
- * ever asserted on SQLite.
- */
-it('creates functional slug indexes only on postgres', function (): void {
-    Schema::dropIfExists('topics');
-    $this->createTopicsTable();
-
-    TranslatableSlug::uniqueIndexes('topics');
-
-    if (DriverMatrix::driver() !== 'pgsql') {
-        // The point: on a non-postgres engine this must be a silent no-op, not an error —
-        // and the table must survive it intact.
-        expect(Schema::hasTable('topics'))->toBeTrue()
-            ->and(Schema::hasColumn('topics', 'slug'))->toBeTrue();
-
-        return;
-    }
-
-    $indexes = DB::table('pg_indexes')->where('tablename', 'topics')->pluck('indexname');
-
-    expect($indexes->filter(static fn (string $n): bool => str_contains($n, 'slug')))->not->toBeEmpty();
 });

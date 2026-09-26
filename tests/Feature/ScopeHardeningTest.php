@@ -5,8 +5,6 @@ declare(strict_types=1);
 use RoundlyConsulting\Translatable\DataTransferObjects\TranslationSearch;
 use RoundlyConsulting\Translatable\Exceptions\InvalidLocaleException;
 use RoundlyConsulting\Translatable\Exceptions\NotATranslatableAttributeException;
-use RoundlyConsulting\Translatable\Exceptions\TranslatableException;
-use RoundlyConsulting\Translatable\Support\TranslatableSlug;
 use RoundlyConsulting\Translatable\Support\Translations;
 use RoundlyConsulting\Translatable\Tests\Fixtures\Topic;
 
@@ -32,37 +30,6 @@ it('guards whereHasLocale and whereMissingLocale', function (): void {
 
     expect(fn () => Topic::query()->whereMissingLocale('secret'))
         ->toThrow(NotATranslatableAttributeException::class);
-});
-
-it('rejects a hostile locale in whereLocaleSlug', function (): void {
-    expect(fn () => Topic::query()->whereLocaleSlug('investing', "en'; DROP TABLE topics;--"))
-        ->toThrow(InvalidLocaleException::class);
-});
-
-it('guards slugTaken against a hostile column and locale', function (): void {
-    expect(fn () => TranslatableSlug::slugTaken('topics', 'slug); DROP TABLE topics;--', 'en', 'x', null))
-        ->toThrow(TranslatableException::class);
-
-    expect(fn () => TranslatableSlug::slugTaken('topics', 'slug', "en'--", 'x', null))
-        ->toThrow(InvalidLocaleException::class);
-});
-
-// F1 — the index DDL helper and command reject hostile identifiers.
-
-it('rejects a hostile table name in uniqueIndexes', function (): void {
-    expect(fn () => TranslatableSlug::uniqueIndexes('topics); DROP TABLE topics;--'))
-        ->toThrow(TranslatableException::class);
-});
-
-it('rejects a hostile column name in uniqueIndexes', function (): void {
-    expect(fn () => TranslatableSlug::uniqueIndexes('topics', "slug'"))
-        ->toThrow(TranslatableException::class);
-});
-
-it('fails the slug-indexes command on a hostile table argument', function (): void {
-    $this->artisan('translatable:slug-indexes', ['table' => 'topics; DROP TABLE users'])
-        ->expectsOutputToContain('Invalid table name')
-        ->assertFailed();
 });
 
 // F9 — LIKE wildcards in the search term are escaped (value stays bound).

@@ -33,26 +33,11 @@ it('ships exactly the config keys it reads', function (): void {
         // scraper this replaces guarded that with a key-SHAPE regex; the expectation gets
         // there by only counting real `config()` call arguments.
         //
-        // No `excludeFromReverse` either: the provider's `contributesToAbout()` closure and
-        // its Blueprint-macro registration both do real `config('translatable.…')` reads, so
-        // excluding it would discard the only reader of several shipped keys. This is the
-        // shape the testing README's own example gets wrong ("a render is not a read") — and
-        // it is especially wrong here, because the provider is the ONLY reader of all four
-        // `slug.*` leaves.
+        // No `excludeFromReverse` either: the provider's `contributesToAbout()` closure does
+        // real `config('translatable.…')` reads ("a render is not a read" is wrong here).
         //
-        // Which is what `sectionVariables` is for. The provider reads the section whole
-        // (`$slug = config('translatable.slug', [])`) and then reads its leaves by array
-        // offset (`$slug['reserved']`, `$slug['separator']`, …). An offset read is a real
-        // read, but it is not a `config()` call, so without this mapping all four leaves
-        // scrape as unread and the reverse direction fails on live config. Mapping `$slug`
-        // to `translatable.slug` teaches the scraper that `$slug['separator']` IS
-        // `translatable.slug.separator`.
-        //
-        // Deliberately NOT `allowUnread`: these keys are read, and an allow-list entry would
-        // assert the opposite — it would also go stale silently the day a leaf really did
-        // die.
-        'sectionVariables' => [
-            'TranslatableServiceProvider.php' => ['$slug' => 'translatable.slug'],
-        ],
+        // No `sectionVariables` any more: the only section read whole and then by offset was
+        // `translatable.slug`, which left with the slug feature — slug config lives in
+        // sluggable-for-laravel now, so every remaining read is a literal `config()` token.
     ]);
 });

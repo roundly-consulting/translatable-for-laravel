@@ -6,19 +6,20 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use RoundlyConsulting\Translatable\Tests\Fixtures\Topic;
 
-it('creates translatable and slug columns via the blueprint macros', function (): void {
+it('creates translatable columns via the blueprint macro', function (): void {
     Schema::dropIfExists('topics');
 
     Schema::create('topics', function (Blueprint $table): void {
         $table->id();
         $table->translatable('name');
-        $table->translatableSlug();
+        $table->translatable('slug')->nullable();
         $table->timestamps();
         $table->softDeletes();
     });
 
-    $topic = Topic::query()->create(['name' => ['en' => 'Investing']]);
+    $topic = Topic::query()->create(['name' => ['en' => 'Investing'], 'slug' => ['en' => 'investing']]);
 
     expect(Schema::hasColumns('topics', ['name', 'slug']))->toBeTrue()
-        ->and($topic->getTranslations('slug'))->toBe(['en' => 'investing']);
+        ->and($topic->fresh()?->getTranslations('name'))->toBe(['en' => 'Investing'])
+        ->and($topic->fresh()?->getTranslations('slug'))->toBe(['en' => 'investing']);
 });

@@ -16,9 +16,9 @@ declare(strict_types=1);
  * that throws at call time and is asserted BEFORE any secret check runs.
  *
  * What translatable must never render is the host's commercial position: the locale list is
- * its market footprint (an unannounced market is a leak), the reserved slugs name the routes
- * it protects, and the slug source field names a column in the host's schema. All report as
- * counts and switches.
+ * its market footprint (an unannounced market is a leak), and the fallback locale can name a
+ * market too. Both report as a count and a switch. (Reserved slugs and the slug source column
+ * moved to sluggable-for-laravel, whose own `about` section guards them.)
  */
 it('contributes a translatable section to about', function (): void {
     expect('translatable')->toLeakNoSecrets(
@@ -27,35 +27,20 @@ it('contributes a translatable section to about', function (): void {
     );
 });
 
-it('never renders a configured locale, reserved slug, or column name', function (): void {
+it('never renders a configured locale', function (): void {
     config()->set('translatable.locales', ['en', 'sk', 'zz-internal-market']);
     config()->set('translatable.fallback_locale', 'zz-internal-market');
-    config()->set('translatable.slug', [
-        'source_field' => 'internal_headline_column',
-        'separator' => '~',
-        'max_words' => 4,
-        'reserved' => ['super-admin-console', 'billing-export'],
-    ]);
+    config()->set('translatable.strict_locales', true);
 
     expect('translatable')->toLeakNoSecrets(
-        secrets: [
-            // An unannounced market the host has not launched yet.
-            'zz-internal-market',
-            // The routes the host protects.
-            'super-admin-console',
-            'billing-export',
-            // A column name from the host's own schema.
-            'internal_headline_column',
-            // The custom separator renders as CUSTOM, never as its value.
-            '~',
-        ],
+        // An unannounced market the host has not launched yet — in the list and as fallback.
+        secrets: ['zz-internal-market'],
         mustRender: [
             // Counts and switches — the positive proof the section rendered, which is what
-            // makes every absence above mean something.
+            // makes the absence above mean something.
             '3 configured',
-            '2 reserved',
-            'CUSTOM',
             'SET',
+            'ON',
         ],
     );
 });

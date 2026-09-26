@@ -54,17 +54,4 @@ abstract class TestCase extends PackageTestCase
             $table->softDeletes();
         });
     }
-
-    protected function createArticlesTable(): void
-    {
-        Schema::dropIfExists('articles');
-
-        Schema::create('articles', function (Blueprint $table): void {
-            $table->id();
-            $table->string('name');
-            $table->string('slug')->nullable();
-            $table->timestamps();
-            $table->softDeletes();
-        });
-    }
 }

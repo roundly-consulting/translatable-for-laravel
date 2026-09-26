@@ -27,10 +27,6 @@ return [
     // (e.g. Locale::SUPPORTED) so there is one source of truth (R3).
     'locales' => ['en', 'sk'],
 
-    'slug' => [
-        'source_field' => 'name',   // default column slugs are generated from
-        'separator' => '-',
-        'max_words' => 12,          // cap Str::slug input length
-        'reserved' => [],           // slugs that may never be generated (e.g. 'edit', 'create')
-    ],
+    // Slugs live in sluggable-for-laravel (config/sluggable.php); a model using HasTranslations
+    // + HasSlug gets per-locale slugs from the locale set above.
 ];

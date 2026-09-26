@@ -10,10 +10,8 @@ use Illuminate\Support\Facades\Blade;
 use RoundlyConsulting\PackageToolkit\Package;
 use RoundlyConsulting\PackageToolkit\PackageServiceProvider;
 use RoundlyConsulting\Sluggable\Contracts\SlugLocales;
-use RoundlyConsulting\Translatable\Commands\SlugIndexesCommand;
 use RoundlyConsulting\Translatable\Contracts\SupportedLocales;
 use RoundlyConsulting\Translatable\Support\ConfigSupportedLocales;
-use RoundlyConsulting\Translatable\Support\TranslatableSlug;
 use RoundlyConsulting\Translatable\Support\TranslatableSlugLocales;
 use RoundlyConsulting\Translatable\Support\TranslationManager;
 use RoundlyConsulting\Translatable\View\Components\TranslationStatus;
@@ -26,9 +24,6 @@ final class TranslatableServiceProvider extends PackageServiceProvider
             ->name('translatable')
             ->hasConfigFile()
             ->hasTranslations()
-            ->hasCommands([
-                SlugIndexesCommand::class,
-            ])
             ->contributesToAbout($this->aboutSection(...));
     }
 
@@ -59,18 +54,14 @@ final class TranslatableServiceProvider extends PackageServiceProvider
 
     /**
      * The `php artisan about` payload. Reports shape, never content: the locale list is the
-     * host's market footprint and reserved slugs name the routes it protects, so both render
-     * as counts. Runs no query.
+     * host's market footprint, so it renders as a count and the fallback locale as SET/DEFAULT.
+     * Runs no query.
      *
      * @return array<string, string>
      */
     private function aboutSection(): array
     {
         $locales = config('translatable.locales', []);
-        $slug = config('translatable.slug', []);
-
-        $reserved = is_array($slug) && is_array($slug['reserved'] ?? null) ? $slug['reserved'] : [];
-        $sourceField = is_array($slug) ? ($slug['source_field'] ?? 'name') : 'name';
 
         return [
             'Locales' => (is_array($locales) ? count($locales) : 0).' configured',
@@ -78,18 +69,14 @@ final class TranslatableServiceProvider extends PackageServiceProvider
             'Fallback' => $this->app->make(TranslationManager::class)->fallbackMode()->value,
             'Fallback locale' => config('translatable.fallback_locale') === null ? 'DEFAULT' : 'SET',
             'Strict locales' => config('translatable.strict_locales') === true ? 'ON' : 'OFF',
-            'Slug source field' => $sourceField === 'name' ? 'DEFAULT' : 'CUSTOM',
-            'Slug separator' => is_array($slug) && ($slug['separator'] ?? '-') === '-' ? 'DEFAULT' : 'CUSTOM',
-            'Slug max words' => (string) (is_array($slug) ? (int) ($slug['max_words'] ?? 12) : 12),
-            'Reserved slugs' => $reserved === [] ? 'NONE' : count($reserved).' reserved',
         ];
     }
 
     /**
-     * The package's own schema macros — `$table->translatable('name')` and
-     * `$table->translatableSlug()`. Not the toolkit's: it ships key-type/morph/audit macros
-     * and owns neither of these, so there is nothing here to delegate to. Guarded, so a
-     * double-registered provider never re-registers them.
+     * The package's own schema macro — `$table->translatable('name')`. Not the toolkit's: it
+     * ships key-type/morph/audit macros and owns none of this. Slug columns come from
+     * sluggable (`$table->localizedSlug()`). Guarded, so a double-registered provider never
+     * re-registers it.
      */
     private function registerBlueprintMacros(): void
     {
@@ -97,13 +84,6 @@ final class TranslatableServiceProvider extends PackageServiceProvider
             Blueprint::macro('translatable', function (string $name): ColumnDefinition {
                 /** @var Blueprint $this */
                 return $this->jsonb($name);
-            });
-        }
-
-        if (! Blueprint::hasMacro('translatableSlug')) {
-            Blueprint::macro('translatableSlug', function (string $name = 'slug'): ColumnDefinition {
-                /** @var Blueprint $this */
-                return TranslatableSlug::column($this, $name);
             });
         }
     }
