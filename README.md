@@ -419,11 +419,12 @@ use RoundlyConsulting\Translatable\Support\Translations;
 
 public function rules(): array
 {
-    return [
-        ...Translations::rules('name', required: true),
-        ...Translations::rules('slug', required: false),
-        'slug' => [UniqueSlug::for(Topic::class)->ignore($this->route('topic'))],   // sluggable's rule
-    ];
+    // Extend the slug rules rather than re-declaring `slug`: a second `'slug' => […]` key would
+    // silently replace `sometimes|array` and let a non-map value through.
+    $slug = Translations::rules('slug', required: false);
+    $slug['slug'][] = UniqueSlug::for(Topic::class)->ignore($this->route('topic'));   // sluggable's rule
+
+    return [...Translations::rules('name', required: true), ...$slug];
 }
 ```
 

@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Validator;
 use RoundlyConsulting\Sluggable\Contracts\ProvidesLocaleMaps;
 use RoundlyConsulting\Sluggable\Contracts\SlugLocales;
 use RoundlyConsulting\Sluggable\DataTransferObjects\SlugIndexSpec;
 use RoundlyConsulting\Sluggable\Exceptions\InvalidSlugDefinitionException;
 use RoundlyConsulting\Sluggable\Facades\Slugs;
+use RoundlyConsulting\Sluggable\Rules\UniqueSlug;
 use RoundlyConsulting\Sluggable\Schema\SlugIndexes;
 use RoundlyConsulting\Sluggable\SluggableServiceProvider;
 use RoundlyConsulting\Sluggable\Support\ConfigSlugLocales;
@@ -16,6 +18,7 @@ use RoundlyConsulting\Translatable\Contracts\SupportedLocales;
 use RoundlyConsulting\Translatable\Exceptions\InvalidLocaleException;
 use RoundlyConsulting\Translatable\Exceptions\NotATranslatableAttributeException;
 use RoundlyConsulting\Translatable\Support\TranslatableSlugLocales;
+use RoundlyConsulting\Translatable\Support\Translations;
 use RoundlyConsulting\Translatable\Tests\Fixtures\SluggedTopic;
 use RoundlyConsulting\Translatable\Tests\Fixtures\Topic;
 use RoundlyConsulting\Translatable\Tests\Fixtures\UncontractedSluggedTopic;
@@ -207,4 +210,26 @@ describe('the SlugLocales binding', function (): void {
 
         SlugIndexes::plan(SlugIndexSpec::localeMap('topics', 'slug'));
     })->throws(InvalidLocaleException::class);
+});
+
+describe('the README admin validation', function (): void {
+    it('keeps the slug array rule next to UniqueSlug', function (): void {
+        $existing = SluggedTopic::query()->create(['name' => ['en' => 'Investing']]);
+
+        // Verbatim from the README's "Admin validation" rules(): the slug rules are extended,
+        // not replaced, so `sometimes|array` survives next to sluggable's rule.
+        $rules = (function (?SluggedTopic $topic): array {
+            $slug = Translations::rules('slug', required: false);
+            $slug['slug'][] = UniqueSlug::for(SluggedTopic::class)->ignore($topic);
+
+            return [...Translations::rules('name', required: true), ...$slug];
+        })(null);
+
+        $passes = fn (array $data): bool => Validator::make($data, $rules)->passes();
+
+        expect($passes(['name' => ['en' => 'Saving'], 'slug' => 'saving']))->toBeFalse()
+            ->and($passes(['name' => ['en' => 'Saving'], 'slug' => ['en' => 'investing']]))->toBeFalse()
+            ->and($passes(['name' => ['en' => 'Saving'], 'slug' => ['en' => 'saving']]))->toBeTrue()
+            ->and($existing->exists)->toBeTrue();
+    });
 });
