@@ -6,13 +6,15 @@
 
 # translatable-for-laravel
 
-Locale-map (`jsonb`) translatable attributes, a fallback chain, and per-locale unique
-translatable slugs for Eloquent — native, with zero third-party dependencies.
+Locale-map (`jsonb`) translatable attributes with a fallback chain for Eloquent — native, with
+zero third-party dependencies.
 
 A single `json`/`jsonb` column stores a plain `{ "en": "…", "sk": "…" }` map per attribute.
 Reads return the current locale through a configurable fallback chain so content never renders
-blank; slugs are generated per locale and can be made unique per locale on PostgreSQL. This is
-the org-wide native solution for multi-locale Eloquent attributes.
+blank. Per-locale slugs come from
+[`sluggable-for-laravel`](https://github.com/roundly-consulting/sluggable-for-laravel), which
+reads and writes translatable attributes through this package's contract (see
+[Slugs](#slugs)). This is the org-wide native solution for multi-locale Eloquent attributes.
 
 ## Requirements
 
@@ -21,9 +23,10 @@ the org-wide native solution for multi-locale Eloquent attributes.
 - `roundly-consulting/enums-for-laravel` (installed automatically) — backs the `FallbackMode` enum
 - `roundly-consulting/package-toolkit-for-laravel` (installed automatically) — the service-provider
   builder, the `DatabaseDriver` enum, and the `LIKE` escaper behind the search helper
-- PostgreSQL is required only for **per-locale slug uniqueness** (functional unique indexes).
-  Everything else works on any Laravel-supported database; the index helpers are a no-op off
-  PostgreSQL.
+- `roundly-consulting/sluggable-for-laravel` (installed automatically) — per-locale slugs over
+  translatable attributes; this package's `Translatable` contract extends its
+  `ProvidesLocaleMaps`
+- Any Laravel-supported database (`ilike` is used on PostgreSQL, an escaped `like` elsewhere).
 
 ## Installation
 
@@ -38,8 +41,8 @@ php artisan vendor:publish --tag="translatable-config"
 php artisan vendor:publish --tag="translatable-translations"
 ```
 
-There is **no** migrations tag — you write your own tables using the column/index helpers
-below.
+There is **no** migrations tag — you write your own tables using the `translatable()` column
+macro below.
 
 ## Configuration
 
@@ -62,13 +65,6 @@ return [
 
     // Default supported locales. Hosts SHOULD rebind SupportedLocales to their own source.
     'locales' => ['en', 'sk'],
-
-    'slug' => [
-        'source_field' => 'name',   // default column slugs are generated from
-        'separator'    => '-',
-        'max_words'    => 12,        // cap the slug input length
-        'reserved'     => [],        // slugs that may never be generated (e.g. 'edit')
-    ],
 ];
 ```
 
@@ -78,17 +74,14 @@ return [
 | `fallback` | `FallbackMode` | `FallbackMode::Any` | `TRANSLATABLE_FALLBACK` (`none`/`fallback`/`any`) | How far the fallback chain reaches. |
 | `strict_locales` | `bool` | `false` | `TRANSLATABLE_STRICT_LOCALES` | Reject writes for locales outside the supported list. |
 | `locales` | `list<string>` | `['en', 'sk']` | — | Default supported locales. |
-| `slug.source_field` | `string` | `name` | — | Column slugs are generated from. |
-| `slug.separator` | `string` | `-` | — | Slug word separator. |
-| `slug.max_words` | `int` | `12` | — | Caps the slug input length. |
-| `slug.reserved` | `list<string>` | `[]` | — | Slugs that are never generated. |
 
-The package works with **zero** host configuration.
+The package works with **zero** host configuration. Slug options (separator, word cap, reserved
+words, …) live in `config/sluggable.php`.
 
 ### One source of truth for locales
 
 Bind the `SupportedLocales` contract in your app's service provider to wrap a single source of
-truth (used by `Translations`, `missingLocales`, `fromInput`, and the slug index helpers):
+truth (used by `Translations`, `missingLocales`, `fromInput` — and by sluggable, see below):
 
 ```php
 use RoundlyConsulting\Translatable\Contracts\SupportedLocales;
@@ -102,6 +95,12 @@ $this->app->bind(SupportedLocales::class, fn () => new class implements Supporte
 });
 ```
 
+Translatable also binds sluggable's `SlugLocales` contract to `TranslatableSlugLocales`, an adapter
+over the same `SupportedLocales`, `translatable.fallback_locale` and the app locale — so slugs are
+generated, indexed and bound for exactly the locales your translations use. Sluggable registers
+its own default with `bindIf()`, so provider order doesn't matter; your own `SlugLocales` binding
+in a later provider wins over both.
+
 ## Usage
 
 ### Translatable attributes
@@ -113,16 +112,14 @@ the trait owns JSON serialization for its listed attributes.
 ```php
 use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Translatable\Concerns\HasTranslations;
-use RoundlyConsulting\Translatable\Concerns\HasTranslatableSlug;
 use RoundlyConsulting\Translatable\Contracts\Translatable;
 
 final class Topic extends Model implements Translatable
 {
     use HasTranslations;
-    use HasTranslatableSlug;
 
     /** @var list<string> */
-    public array $translatable = ['name', 'description', 'slug'];
+    public array $translatable = ['name', 'description'];
 }
 ```
 
@@ -306,95 +303,127 @@ protected ?string $translatableFallbackLocale = 'en';
 ```php
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
-use RoundlyConsulting\Translatable\Support\TranslatableSlug;
 
 Schema::create('topics', function (Blueprint $table): void {
     $table->id();
-    $table->translatable('name');          // jsonb column (macro over the helper)
+    $table->translatable('name');          // jsonb column
     $table->translatable('description')->nullable();
-    $table->translatableSlug();            // jsonb 'slug' column
+    $table->localizedSlug('slug');         // sluggable's macro — jsonb / json / text per engine
     $table->timestamps();
-    $table->softDeletes();
 });
-
-// After the table exists — one functional unique index per supported locale (PostgreSQL only):
-TranslatableSlug::uniqueIndexes('topics');
 ```
 
-`TranslatableSlug::column($table, 'slug')` and `TranslatableSlug::uniqueIndexes($table, 'slug')`
-are the plain helpers behind the `translatableSlug()` / `translatable()` macros. `uniqueIndexes`
-is a no-op on non-PostgreSQL drivers, and a `NULL` (missing) locale is exempt so partial
-translations stay legal.
+### Slugs
 
-> **Uniqueness is authoritative on PostgreSQL only.** The functional unique indexes are the real
-> guard. On other drivers there is no per-locale unique index, so uniqueness is **best-effort**:
-> generation avoids collisions at create time, and a create that loses a race is retried with the
-> next suffix, but two truly-concurrent writers can still mint the same slug. Use PostgreSQL where
-> per-locale slug uniqueness must be guaranteed. (Table/column names passed to `uniqueIndexes` and
-> the `translatable:slug-indexes` command are validated as plain identifiers before any DDL runs.)
-
-### Translatable slugs
-
-`HasTranslatableSlug` generates a slug per locale on create from `slug.source_field`:
+Slugs are owned by [`sluggable-for-laravel`](https://github.com/roundly-consulting/sluggable-for-laravel)
+(installed with this package). A translatable model gets per-locale slugs with two traits and two
+interfaces — no cast, no glue:
 
 ```php
+use Illuminate\Database\Eloquent\Model;
+use RoundlyConsulting\Sluggable\Concerns\HasSlug;
+use RoundlyConsulting\Sluggable\Contracts\Sluggable;
+use RoundlyConsulting\Sluggable\Definitions\SlugDefinition;
+use RoundlyConsulting\Sluggable\Definitions\SlugOptions;
+use RoundlyConsulting\Translatable\Concerns\HasTranslations;
+use RoundlyConsulting\Translatable\Contracts\Translatable;
+
+final class Topic extends Model implements Translatable, Sluggable
+{
+    use HasTranslations;
+    use HasSlug;
+
+    /** @var list<string> */
+    public array $translatable = ['name', 'description', 'slug'];
+
+    public function slugOptions(): SlugOptions
+    {
+        return SlugOptions::make(
+            SlugDefinition::for('slug')->from('name')->routeKey(),
+        );
+    }
+
+    /** @return list<string> */
+    protected function translationStatusExcludes(): array
+    {
+        return ['slug'];
+    }
+}
+
 $topic = Topic::create(['name' => ['en' => 'Investing', 'sk' => 'Investovanie']]);
-$topic->getTranslations('slug'); // ['en' => 'investing', 'sk' => 'investovanie']
+$topic->getTranslations('slug');   // ['en' => 'investing', 'sk' => 'investovanie']
 ```
 
-- Admin-supplied slugs are preserved; only missing locales are generated.
-- Per-locale collisions suffix: `investing`, `investing-2`, `investing-3`, …
-- A locale with no usable source gets a short random slug.
-- A model without a translatable `slug` column falls back to a single plain-string slug (same
-  trait).
+How it fits together:
 
-Resolve by slug:
+- `Translatable` extends sluggable's `ProvidesLocaleMaps`; `HasTranslations` implements it
+  (`isLocaleMapAttribute()` → `isTranslatableAttribute()`, `getLocaleMap()` → `getTranslations()`,
+  `setLocaleMap()` → `setTranslations()`). Sluggable therefore detects the `slug` attribute as a
+  locale map, builds the `sk` slug from the `sk` name regardless of the request locale, and every
+  slug it writes goes through translatable's locale-key validation and `strict_locales`.
+- **The model must `implements Translatable`.** A model that uses `HasTranslations` without the
+  interface has no cast on its `slug`, so sluggable refuses it with
+  `InvalidSlugDefinitionException` (`localeMapContractMissing`) rather than treating the jsonb
+  column as a plain string.
+- Uniqueness, engine-native unique indexes (`SlugIndexes`, `php artisan sluggable:indexes`),
+  querying (`whereSlug`, `whereSlugInAnyLocale`, `findBySlug`), route binding, the `UniqueSlug`
+  validation rule, slug history and redirects are all sluggable's — see its README.
 
-```php
-Topic::query()->whereLocaleSlug($slug)->first();  // request locale -> fallback-locale slug
-Topic::query()->whereAnySlug($slug)->first();      // any supported locale (stale-locale rescue)
+### Migrating from `HasTranslatableSlug`
 
-// Route model binding: current-locale slug -> fallback slug -> any-locale slug
-Route::get('/topics/{topic:slug}', fn (Topic $topic) => $topic);
-```
+Translatable no longer ships a slug feature. Replace it like this (no data migration — the stored
+`{"en": "…"}` map is identical, and sluggable's default output is byte-identical to `Str::slug()`):
 
-The scopes validate a request-supplied `$locale` and reject a non-translatable `$field`, so they
-are safe to hand `?locale=` straight from the request.
+| Removed | Use instead |
+|---|---|
+| `Concerns\HasTranslatableSlug` | `RoundlyConsulting\Sluggable\Concerns\HasSlug` + the `Sluggable` contract |
+| `$table->translatableSlug()` | `$table->localizedSlug()` |
+| `Support\TranslatableSlug::uniqueIndexes()` | `SlugIndexes::forModel(Topic::class)` / `SlugIndexes::ensure(SlugIndexSpec::localeMap(...))` |
+| `Rules\UniqueTranslatedSlug`, `TranslatableSlug::assertUnique()` | `RoundlyConsulting\Sluggable\Rules\UniqueSlug::for(Topic::class)->ignore($topic)` |
+| `php artisan translatable:slug-indexes` | `php artisan sluggable:indexes "App\Models\Topic"` |
+| `DataTransferObjects\SlugOptions`, `UniqueSlugContext` | `SlugDefinition` / the rule's fluent API |
+| `translatable.slug.*` config | `config/sluggable.php` (`defaults.*`, `reserved`) |
+| `translatable::validation.unique_slug` | `sluggable::validation.unique_locale` |
+| `whereLocaleSlug()` / `whereAnySlug()` | `whereSlug()` / `whereSlugInAnyLocale()` |
+| `protected bool $resolveSlugBindingById` | `->bindByKeyFallback()` |
 
-By default route binding resolves **by slug only** — a numeric slug like `"2024"` is never shadowed
-by the record with id `2024`, and slug routes can't be enumerated by id. Opt into an id fallback
-(tried only *after* the slug misses) per model:
+Behaviour changes with sluggable's defaults, and how to keep the old behaviour:
 
-```php
-// Resolve {topic:slug} by primary key when no slug matches.
-protected bool $resolveSlugBindingById = true;
-```
+| Behaviour | Before | After (default) | To keep the old behaviour |
+|---|---|---|---|
+| generation on update | never (create only) | fill missing locales (`IfEmpty`) | `->immutable()` |
+| manual slug | stored verbatim, never uniquified | normalised + uniquified | `->manual(ManualSlugPolicy::Strict)` (verbatim, throw on collision) |
+| source field | `translatable.slug.source_field` | `->from('name')` / `sluggable.defaults.source` | — |
+| word cap | 12 words | none | `->maxWords(12)` |
+| probing | 50 sequential (one query each), then an unbounded random loop | 50 sequential in batches of 10, then ≤ 10 random, then `SlugGenerationException` | — |
+| no-op save | n/a | `IfEmpty` back-fill needs a real change, `regenerateSlugs()` or `sluggable:regenerate --mode=missing` | — |
+| DB indexes | PostgreSQL only | PostgreSQL, MySQL and SQLite | — |
+| "taken" semantics | generation honoured global scopes (a tenant/`published`/SoftDeletes scope hid collisions); the rule excluded trashed rows; the pg index included them | one semantics everywhere: no global scopes, trashed rows count as taken | `->excludeTrashed()` + an exclude-trashed index (drop the legacy index first) |
+| collisions hidden by global scopes | duplicate slug, then a raw unique violation on PostgreSQL | suffixed (`-2`) | `->uniqueWithin('tenant_id')` for per-tenant slugs |
+| race retries | 5 | 3 (`sluggable.concurrency.retries`) | `->retries(5)` |
+| binding chain | current → fallback → any | same (`LocaleFallback::Any`) | — |
+
+**Existing PostgreSQL indexes.** `TranslatableSlug::uniqueIndexes()` named its indexes
+`{table}_{column}_{locale}_unique`; sluggable names them `{table}_{column}_{locale}_slug_unique`.
+Calling `SlugIndexes::ensure()` on such a table creates a **second**, equivalent index — drop the
+old ones first (or skip `ensure()` for those tables; the retry matcher also recognises a violation
+that names the slug column). The legacy indexes include trashed rows, matching sluggable's default;
+switching a definition to `->excludeTrashed()` requires dropping them, otherwise sluggable raises
+`SlugGenerationException::constraintMismatch`.
 
 ### Admin validation
 
 ```php
+use RoundlyConsulting\Sluggable\Rules\UniqueSlug;
 use RoundlyConsulting\Translatable\Support\Translations;
-use RoundlyConsulting\Translatable\Support\TranslatableSlug;
-use RoundlyConsulting\Translatable\DataTransferObjects\UniqueSlugContext;
-use RoundlyConsulting\Translatable\Rules\UniqueTranslatedSlug;
 
 public function rules(): array
 {
     return [
         ...Translations::rules('name', required: true),
         ...Translations::rules('slug', required: false),
-        'slug' => new UniqueTranslatedSlug('topics', ignoreId: $this->route('topic')?->id),
+        'slug' => [UniqueSlug::for(Topic::class)->ignore($this->route('topic'))],   // sluggable's rule
     ];
-}
-
-// Or the after-validation style:
-public function withValidator(Validator $validator): void
-{
-    $validator->after(fn () => TranslatableSlug::assertUnique($validator, new UniqueSlugContext(
-        input: $this->input('slug'),
-        table: 'topics',
-        ignoreId: $this->route('topic')?->id,
-    )));
 }
 ```
 
@@ -403,15 +432,6 @@ locale of the field):
 
 ```php
 ...Translations::rules('name', required: true, each: ['max:120']);
-```
-
-For a model with a non-`id` primary key (uuid, custom, composite key column), pass its key name so
-uniqueness ignores the right row:
-
-```php
-new UniqueTranslatedSlug('topics', ignoreId: $record->getKey(), keyName: 'uuid');
-
-new UniqueSlugContext(input: $this->input('slug'), table: 'topics', ignoreId: $id, keyName: 'uuid');
 ```
 
 Other `Translations` helpers:
@@ -441,15 +461,6 @@ Drop the "which locales are still missing" badge every admin form repeats into a
 It renders each field's missing locales for a partial model, or a "complete" badge when the model
 is fully translated (respecting `translationStatusExcludes()`).
 
-### Command
-
-Run once after adding a supported locale to (re)create the missing per-locale unique indexes
-(create-only; PostgreSQL only):
-
-```bash
-php artisan translatable:slug-indexes topics --column=slug
-```
-
 ### Storage format
 
 Values are stored as a plain `{ "en": "…", "sk": "…" }` JSON object — no vendor wrapper. Rows
@@ -459,15 +470,15 @@ there is **no data migration** when adopting this package.
 ### `php artisan about`
 
 The package contributes a `Translatable` section reporting its shape — how many locales are
-configured and where they come from, the fallback mode, the strict-locale switch, and the slug
-bounds:
+configured and where they come from, the fallback mode, the fallback-locale and strict-locale
+switches:
 
 ```bash
 php artisan about --only=translatable
 ```
 
-It reports **counts and switches, never values**: your locale list and your reserved slugs are
-never printed.
+It reports **counts and switches, never values**: your locale list is never printed. (Slug
+settings appear in sluggable's own `about` section.)
 
 ## Testing
 
@@ -489,7 +500,7 @@ CI runs all three engines, and each one earns its place:
 | Leg | What only it can catch |
 |---|---|
 | **sqlite** | a `LIKE` with no `ESCAPE` clause. SQLite has no default LIKE escape character, so an unescaped term matches **nothing** — while the same code is green on PostgreSQL and MySQL. This package shipped exactly that bug. |
-| **pgsql** | the PostgreSQL-only surface: the functional per-locale unique slug indexes, the `ilike` path, real `jsonb` columns. |
+| **pgsql** | the PostgreSQL-only surface: the `ilike` path and real `jsonb` columns — including sluggable's per-locale slugs over them. |
 | **mysql** | the `like` branch on a real server. Everything that is not PostgreSQL takes that branch, so without this leg "not PostgreSQL" was only ever proven against SQLite — the one engine that disagrees with MySQL about escaping. |
 
 The PostgreSQL-only cases skip visibly when no engine is reachable, so a run that asserts
