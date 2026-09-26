@@ -1,10 +1,12 @@
+<!-- roundly-hero:start -->
 <p align="center">
-  <a href="https://roundly-consulting.com/open-source">
-    <img src="art/hero.png" alt="Translatable For Laravel — Roundly open source" width="100%">
+  <a href="https://roundly-consulting.com/open-source/docs/translatable-for-laravel?utm_source=github&utm_medium=readme&utm_campaign=open-source&utm_content=translatable-for-laravel">
+    <img src="art/hero.png" alt="Translatable for Laravel — Roundly open source" width="100%">
   </a>
 </p>
+<!-- roundly-hero:end -->
 
-# translatable-for-laravel
+# Translatable for Laravel
 
 Locale-map (`jsonb`) translatable attributes with a fallback chain for Eloquent — native, with
 zero third-party dependencies.
