@@ -381,48 +381,6 @@ How it fits together:
   querying (`whereSlug`, `whereSlugInAnyLocale`, `findBySlug`), route binding, the `UniqueSlug`
   validation rule, slug history and redirects are all sluggable's — see its README.
 
-### Migrating from `HasTranslatableSlug`
-
-Translatable no longer ships a slug feature. Replace it like this (no data migration — the stored
-`{"en": "…"}` map is identical, and sluggable's default output is byte-identical to `Str::slug()`):
-
-| Removed | Use instead |
-|---|---|
-| `Concerns\HasTranslatableSlug` | `RoundlyConsulting\Sluggable\Concerns\HasSlug` + the `Sluggable` contract |
-| `$table->translatableSlug()` | `$table->localizedSlug()` |
-| `Support\TranslatableSlug::uniqueIndexes()` | `SlugIndexes::forModel(Topic::class)` / `SlugIndexes::ensure(SlugIndexSpec::localeMap(...))` |
-| `Rules\UniqueTranslatedSlug`, `TranslatableSlug::assertUnique()` | `RoundlyConsulting\Sluggable\Rules\UniqueSlug::for(Topic::class)->ignore($topic)` |
-| `php artisan translatable:slug-indexes` | `php artisan sluggable:indexes "App\Models\Topic"` |
-| `DataTransferObjects\SlugOptions`, `UniqueSlugContext` | `SlugDefinition` / the rule's fluent API |
-| `translatable.slug.*` config | `config/sluggable.php` (`defaults.*`, `reserved`) |
-| `translatable::validation.unique_slug` | `sluggable::validation.unique_locale` |
-| `whereLocaleSlug()` / `whereAnySlug()` | `whereSlug()` / `whereSlugInAnyLocale()` |
-| `protected bool $resolveSlugBindingById` | `->bindByKeyFallback()` |
-
-Behaviour changes with sluggable's defaults, and how to keep the old behaviour:
-
-| Behaviour | Before | After (default) | To keep the old behaviour |
-|---|---|---|---|
-| generation on update | never (create only) | fill missing locales (`IfEmpty`) | `->immutable()` |
-| manual slug | stored verbatim, never uniquified | normalised + uniquified | `->manual(ManualSlugPolicy::Strict)` (verbatim, throw on collision) |
-| source field | `translatable.slug.source_field` | `->from('name')` / `sluggable.defaults.source` | — |
-| word cap | 12 words | none | `->maxWords(12)` |
-| probing | 50 sequential (one query each), then an unbounded random loop | 50 sequential in batches of 10, then ≤ 10 random, then `SlugGenerationException` | — |
-| no-op save | n/a | `IfEmpty` back-fill needs a real change, `regenerateSlugs()` or `sluggable:regenerate --mode=missing` | — |
-| DB indexes | PostgreSQL only | PostgreSQL, MySQL and SQLite | — |
-| "taken" semantics | generation honoured global scopes (a tenant/`published`/SoftDeletes scope hid collisions); the rule excluded trashed rows; the pg index included them | one semantics everywhere: no global scopes, trashed rows count as taken | `->excludeTrashed()` + an exclude-trashed index (drop the legacy index first) |
-| collisions hidden by global scopes | duplicate slug, then a raw unique violation on PostgreSQL | suffixed (`-2`) | `->uniqueWithin('tenant_id')` for per-tenant slugs |
-| race retries | 5 | 3 (`sluggable.concurrency.retries`) | `->retries(5)` |
-| binding chain | current → fallback → any | same (`LocaleFallback::Any`) | — |
-
-**Existing PostgreSQL indexes.** `TranslatableSlug::uniqueIndexes()` named its indexes
-`{table}_{column}_{locale}_unique`; sluggable names them `{table}_{column}_{locale}_slug_unique`.
-Calling `SlugIndexes::ensure()` on such a table creates a **second**, equivalent index — drop the
-old ones first (or skip `ensure()` for those tables; the retry matcher also recognises a violation
-that names the slug column). The legacy indexes include trashed rows, matching sluggable's default;
-switching a definition to `->excludeTrashed()` requires dropping them, otherwise sluggable raises
-`SlugGenerationException::constraintMismatch`.
-
 ### Admin validation
 
 ```php
