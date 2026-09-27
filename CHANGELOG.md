@@ -1,32 +1,29 @@
 # Changelog
 
-All notable changes to `translatable-for-laravel` will be documented in this file.
+All notable changes to `translatable-for-laravel` are documented in this file. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
+[Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
-- **Removed: the slug feature** — it moved to `sluggable-for-laravel`, now a hard dependency.
-  Gone: `HasTranslatableSlug`, `SlugGenerator`, `TranslatableSlug`, `UniqueTranslatedSlug`,
-  `translatable:slug-indexes`, the `SlugOptions`/`UniqueSlugContext` DTOs, the
-  `translatableSlug` Blueprint macro, the `translatable.slug.*` config, the `unique_slug` lang line
-  and the slug `about` lines. See the README's "Migrating from `HasTranslatableSlug`".
-- The `Translatable` contract now extends sluggable's `ProvidesLocaleMaps`; `HasTranslations`
-  implements `isLocaleMapAttribute()`, `getLocaleMap()` and `setLocaleMap()`.
-- Sluggable's `SlugLocales` is bound to the new `TranslatableSlugLocales` adapter (one locale
-  source of truth for translations and slugs).
-- Localized array/JSON serialization: `toArray()`/`toJson()`/API Resources now emit the resolved
-  locale value for translatable attributes (matching property access), not the raw JSON map.
-  Output shape only — persisted data is unchanged.
-- Added the `Translatable` facade over a bound, swappable `TranslationManager`; the static
-  `Translations::…` helpers delegate to it.
-- Added whole-model status helpers: `missingTranslations()`, `isFullyTranslated()`,
-  `translationCompleteness()`, plus a `translationStatusExcludes()` hook.
-- Added the opt-in `DispatchesTranslationEvents` trait and `TranslationsChanged` event.
-- Added driver-agnostic query scopes `whereLocale()`, `whereHasLocale()`, `whereMissingLocale()`.
-- Added `Translatable::usingLocale()` for stateless, scoped locale reads.
-- `Translations::rules()` accepts an `each` parameter for extra per-locale value rules.
-- Added the `<x-translatable-status>` Blade component for the missing-locale badge.
-- Tightened `getTranslations()` return typing with a conditional return type.
+Initial public release.
 
-## 1.0.0
+### Added
 
-- Initial release.
+- Translatable Eloquent attributes stored as a plain `{ "en": "…", "sk": "…" }` map in a
+  `json` / `jsonb` column, via the `HasTranslations` trait and `Translatable` contract.
+- Reads that return the current locale through a configurable fallback chain (`FallbackMode`:
+  `None`, `Fallback`, `Any`), set globally or per model.
+- Locale keys and values validated on every write, with optional strict locales, and
+  `Translations::fromInput()` to clean untrusted request input.
+- Serialization (`toArray()`, JSON, API Resources) that emits the resolved locale value.
+- Translation-status helpers — `missingLocales()`, `missingTranslations()`, `isFullyTranslated()`,
+  `translationCompleteness()` — and an `<x-translatable-status>` Blade badge.
+- Driver-agnostic query scopes (`whereLocale()`, `whereHasLocale()`, `whereMissingLocale()`) and
+  literal-safe per-locale search with `Translations::whereLike()`.
+- A `translatable()` schema macro for migrations.
+- Per-locale slugs through `sluggable-for-laravel`, using one `SupportedLocales` source of truth.
+- A `Translatable` facade, including `usingLocale()` to read a model in another locale.
+- Admin validation rules (`Translations::rules()`) and PATCH-style merging with
+  `Translations::apply()`.
+- An opt-in `TranslationsChanged` event and a `Translatable` section in `php artisan about`.
