@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\Schema;
 use RoundlyConsulting\Translatable\DataTransferObjects\TranslationSearch;
+use RoundlyConsulting\Translatable\Exceptions\TranslatableException;
 use RoundlyConsulting\Translatable\Facades\Translatable;
 use RoundlyConsulting\Translatable\Tests\Fixtures\Topic;
 
@@ -74,3 +75,25 @@ it('escapes wildcards on postgres too (ilike path)', function (): void {
         ->and(searchNames('%'))->toBe(['100% cotton shirt'])
         ->and(searchNames('COTTON'))->toHaveCount(2);
 })->skip(fn (): bool => ! pgsqlConfigured(), 'PostgreSQL is not configured.');
+
+it('matches nothing when the search names no fields', function (): void {
+    $results = Translatable::search(Topic::query(), new TranslationSearch(fields: [], term: 'zzz'));
+
+    expect($results->count())->toBe(0)
+        ->and(Topic::query()->count())->toBe(6);
+});
+
+it('matches nothing when no locale is supported', function (): void {
+    config()->set('translatable.locales', []);
+
+    expect(searchNames('cotton'))->toBe([]);
+});
+
+it('still validates the field names when no locale is supported', function (): void {
+    config()->set('translatable.locales', []);
+
+    expect(fn () => Translatable::search(
+        Topic::query(),
+        new TranslationSearch(fields: ['name; drop table topics'], term: 'x'),
+    ))->toThrow(TranslatableException::class);
+});

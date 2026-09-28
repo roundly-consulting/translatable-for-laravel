@@ -202,24 +202,33 @@ class TranslationManager
     }
 
     /**
-     * Add a per-locale, case-insensitive search across the given fields.
+     * Add a per-locale, case-insensitive search across the given fields. A search with no
+     * fields (or no supported locale) searches nothing, so it matches no rows — an empty OR
+     * group would otherwise add no constraint and return every row.
      *
      * @param  Builder<covariant Model>  $query
      * @return Builder<covariant Model>
      */
     public function search(Builder $query, TranslationSearch $search): Builder
     {
+        foreach ($search->fields as $field) {
+            LocaleGuard::ensureIdentifier($field, 'search field');
+        }
+
+        $locales = $this->supported();
+
+        if ($search->fields === [] || $locales === []) {
+            return $query->whereRaw('1 = 0');
+        }
+
         $isPgsql = ConnectionDriver::isPgsql($query->getModel()->getConnection());
         // Escape LIKE wildcards so a term like "100%" scopes the (bound) match instead of
         // matching everything; the value stays bound, this only neutralises %/_/\ meaning.
         $term = '%'.LikeEscaper::escape($search->term).'%';
         $grammar = $query->getQuery()->getGrammar();
-        $locales = $this->supported();
 
         return $query->where(static function (Builder $inner) use ($search, $isPgsql, $term, $locales, $grammar): void {
             foreach ($search->fields as $field) {
-                LocaleGuard::ensureIdentifier($field, 'search field');
-
                 foreach ($locales as $locale) {
                     // Only the grammar-wrapped, allowlisted identifier reaches the SQL; the
                     // needle and the escape character are bound.
