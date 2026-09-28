@@ -14,15 +14,22 @@ use RoundlyConsulting\Translatable\Contracts\Translatable;
 use RoundlyConsulting\Translatable\DataTransferObjects\TranslationChanges;
 use RoundlyConsulting\Translatable\DataTransferObjects\TranslationSearch;
 use RoundlyConsulting\Translatable\Enums\FallbackMode;
+use RoundlyConsulting\Translatable\Exceptions\InvalidLocaleException;
 
 /**
- * The single, injectable/mockable front door for the locale-map toolkit. Bound in the
- * container and fronted by the `Translatable` facade; the static `Translations::…` helpers
- * delegate here so a host can swap one fake and have every call observe it.
+ * The single, injectable front door for the locale-map toolkit, bound as a singleton and
+ * fronted by the `Translatable` facade. The `HasTranslations` trait reads its locale set,
+ * fallback settings, locale validation and map resolution through here too, so a host that
+ * swaps the manager is observed on the facade and on every model alike.
  *
  * Intentionally NOT `final`: this is the package's one designed extension/swap seam. Hosts
  * override a method (e.g. `supported()`) by extending it and `Translatable::swap()`-ing the
  * subclass — the sibling methods observe the override polymorphically. See FacadeTest.
+ *
+ * There are no actions and no fake: everything here is pure locale-map computation over config
+ * and the bound `SupportedLocales` (no DB write, queue, mail, event or HTTP call). Pin the
+ * locale set in a test with `config()->set('translatable.locales', [...])` or by binding
+ * `SupportedLocales`.
  */
 class TranslationManager
 {
@@ -36,9 +43,47 @@ class TranslationManager
         return app(SupportedLocales::class)->supported();
     }
 
+    /**
+     * Whether a locale is in the supported set. Exact, case-sensitive match — the same rule
+     * `fromInput()` and `strict_locales` apply.
+     */
+    public function isSupported(string $locale): bool
+    {
+        return in_array($locale, $this->supported(), true);
+    }
+
     public function currentLocale(): string
     {
         return app()->getLocale();
+    }
+
+    /**
+     * Validate a locale key and return it. A malformed key (quotes, spaces, markup, SQL) always
+     * throws; in strict mode a well-formed key outside the supported set throws too.
+     *
+     * @throws InvalidLocaleException
+     */
+    public function ensureLocale(string $locale, bool $strict = false): string
+    {
+        return LocaleGuard::ensure($locale, $strict, $strict ? $this->supported() : null);
+    }
+
+    /**
+     * Resolve a raw locale map to one value through the fallback chain: the requested locale
+     * (default: the current one), then — per the mode — the fallback locale, then the first
+     * non-blank value. Mode and fallback locale default to the configured ones. Blank values
+     * never win.
+     *
+     * @param  array<string, string>  $map
+     */
+    public function resolve(array $map, ?string $locale = null, ?FallbackMode $mode = null, ?string $fallbackLocale = null): ?string
+    {
+        return (new FallbackResolver)->resolve(
+            $map,
+            $locale ?? $this->currentLocale(),
+            $fallbackLocale ?? $this->fallbackLocale(),
+            $mode ?? $this->fallbackMode(),
+        );
     }
 
     /**
@@ -108,7 +153,7 @@ class TranslationManager
     {
         $rules = [
             $field => $required
-                ? array_merge(['required', 'array'], Translations::filledRule($field))
+                ? array_merge(['required', 'array'], $this->filledRule($field))
                 : ['sometimes', 'array'],
         ];
 
@@ -117,6 +162,27 @@ class TranslationManager
         }
 
         return $rules;
+    }
+
+    /**
+     * A rule set enforcing that at least one locale of the field is non-blank. `rules()` adds it
+     * to every required field; use it directly to compose your own rule list.
+     *
+     * @return list<Closure(string, mixed, Closure): void>
+     */
+    public function filledRule(string $field): array
+    {
+        return [
+            static function (string $attribute, mixed $value, Closure $fail): void {
+                $filled = is_array($value)
+                    ? array_filter($value, static fn (mixed $item): bool => is_string($item) && $item !== '')
+                    : [];
+
+                if ($filled === []) {
+                    $fail((string) __('translatable::validation.filled'));
+                }
+            },
+        ];
     }
 
     /**

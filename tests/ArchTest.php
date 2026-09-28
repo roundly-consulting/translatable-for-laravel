@@ -40,6 +40,13 @@ ArchPresets::runtimeRequireIsWhitelisted(__DIR__.'/../composer.json');
 ArchPresets::noDebuggingLeftovers();
 
 /**
+ * One path: `HasTranslations` / `DispatchesTranslationEvents` reach manager-level behaviour
+ * through `TranslationManager`, never an action. The package has no `src/Actions` today, so
+ * this guards the Concerns namespace against the first one being wired in behind the facade.
+ */
+ArchPresets::modelsGoThroughTheFacade('RoundlyConsulting\Translatable');
+
+/**
  * `swappableModelsAreNotFinal` and `modelsResolveThroughSeam` are skipped with cause:
  * translatable ships no Eloquent model and no `*_model` config key — it is a trait
  * (`HasTranslations`) applied to the HOST's models, so there is nothing to swap and both

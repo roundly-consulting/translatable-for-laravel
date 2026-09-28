@@ -8,13 +8,11 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use JsonException;
 use RoundlyConsulting\Translatable\Enums\FallbackMode;
-use RoundlyConsulting\Translatable\Exceptions\InvalidLocaleException;
 use RoundlyConsulting\Translatable\Exceptions\InvalidTranslationValueException;
 use RoundlyConsulting\Translatable\Exceptions\NotATranslatableAttributeException;
 use RoundlyConsulting\Translatable\Exceptions\TranslatableException;
-use RoundlyConsulting\Translatable\Support\FallbackResolver;
 use RoundlyConsulting\Translatable\Support\LocaleGuard;
-use RoundlyConsulting\Translatable\Support\Translations;
+use RoundlyConsulting\Translatable\Support\TranslationManager;
 use stdClass;
 
 /**
@@ -24,6 +22,11 @@ use stdClass;
  * A model lists translatable attributes in a `public array $translatable` property and may
  * declare `protected ?FallbackMode $translatableFallbackMode` /
  * `protected ?string $translatableFallbackLocale` to override the config defaults.
+ *
+ * Everything that is not per-model state — the supported locales, the current locale, the
+ * configured fallback settings, locale-key validation and map resolution — goes through the
+ * bound `TranslationManager`, so a host that swaps it (`Translatable::swap()`) is observed on
+ * every model too.
  *
  * @property array<int, string> $translatable
  *
@@ -83,11 +86,11 @@ trait HasTranslations
         $locale ??= $this->currentLocale();
         $mode = $useFallback ? $this->translationFallbackMode() : FallbackMode::None;
 
-        return (new FallbackResolver)->resolve(
+        return $this->translationManager()->resolve(
             $this->readMap($key),
             $locale,
-            $this->translationFallbackLocale(),
             $mode,
+            $this->translationFallbackLocale(),
         );
     }
 
@@ -193,7 +196,7 @@ trait HasTranslations
     {
         $this->guardTranslatable($key);
 
-        return array_values(array_diff(Translations::supported(), $this->getTranslatedLocales($key)));
+        return array_values(array_diff($this->translationManager()->supported(), $this->getTranslatedLocales($key)));
     }
 
     /**
@@ -237,7 +240,7 @@ trait HasTranslations
     public function translationCompleteness(): float
     {
         $attributes = $this->translationStatusAttributes();
-        $locales = Translations::supported();
+        $locales = $this->translationManager()->supported();
         $total = count($attributes) * count($locales);
 
         if ($total === 0) {
@@ -365,13 +368,7 @@ trait HasTranslations
             return $this->translatableFallbackMode;
         }
 
-        $configured = config('translatable.fallback');
-
-        if ($configured instanceof FallbackMode) {
-            return $configured;
-        }
-
-        return FallbackMode::tryFrom((string) $configured) ?? FallbackMode::Any;
+        return $this->translationManager()->fallbackMode();
     }
 
     public function translationFallbackLocale(): string
@@ -380,12 +377,21 @@ trait HasTranslations
             return $this->translatableFallbackLocale;
         }
 
-        return (string) config('translatable.fallback_locale', 'en');
+        return $this->translationManager()->fallbackLocale();
     }
 
     protected function currentLocale(): string
     {
-        return app()->getLocale();
+        return $this->translationManager()->currentLocale();
+    }
+
+    /**
+     * The bound manager — resolved per call, so a host swap made after this model was built
+     * still wins.
+     */
+    protected function translationManager(): TranslationManager
+    {
+        return app(TranslationManager::class);
     }
 
     /**
@@ -482,9 +488,12 @@ trait HasTranslations
      */
     protected function guardLocale(string $locale): void
     {
-        $strict = (bool) config('translatable.strict_locales', false);
+        // The format allowlist is a fixed security floor — a locale key ends up in a JSON path —
+        // so it never depends on an overridable method. The manager adds the strict
+        // supported-set check, so a swapped `supported()` is honoured.
+        LocaleGuard::ensure($locale);
 
-        LocaleGuard::ensure($locale, $strict, $strict ? Translations::supported() : null);
+        $this->translationManager()->ensureLocale($locale, (bool) config('translatable.strict_locales', false));
     }
 
     /**
@@ -496,13 +505,8 @@ trait HasTranslations
     {
         $this->guardTranslatable($field);
 
-        $locale ??= $this->currentLocale();
-
-        if (! LocaleGuard::isValid($locale)) {
-            throw InvalidLocaleException::forFormat($locale);
-        }
-
-        return $locale;
+        // Same fixed floor as guardLocale(): a request-supplied locale reaches a JSON path.
+        return LocaleGuard::ensure($locale ?? $this->currentLocale());
     }
 
     protected function guardTranslatable(string $key): void

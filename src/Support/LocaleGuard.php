@@ -11,6 +11,8 @@ use RoundlyConsulting\Translatable\Exceptions\TranslatableException;
  * The single source of truth for validating locale keys and SQL identifiers before they
  * reach a JSON-path column expression or a raw DDL statement. Locale keys and table/column
  * names are never parameter-bound in those positions, so they must be allowlisted here.
+ *
+ * @internal building block — hosts call `Translatable::ensureLocale()` / `isSupported()`.
  */
 final class LocaleGuard
 {

@@ -15,7 +15,7 @@ final class InvalidLocaleException extends TranslatableException
         return new self(
             "Locale [{$locale}] is not a valid locale key. ".
             'Expected a BCP-47-like code such as "en", "en_US" or "pt-BR". '.
-            'Route raw request maps through Translations::fromInput() to drop bad keys.'
+            'Route raw request maps through Translatable::fromInput() to drop bad keys.'
         );
     }
 

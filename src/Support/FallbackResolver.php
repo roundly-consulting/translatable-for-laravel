@@ -9,6 +9,9 @@ use RoundlyConsulting\Translatable\Enums\FallbackMode;
 /**
  * Pure resolution of a locale map to a single value, driven by a FallbackMode.
  * Unit-testable independent of Eloquent.
+ *
+ * @internal building block — hosts call `Translatable::resolve()`, which fills in the current
+ *           locale and the configured fallback settings.
  */
 final readonly class FallbackResolver
 {
