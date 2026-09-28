@@ -94,7 +94,8 @@ words, …) live in `config/sluggable.php`.
 ### One source of truth for locales
 
 Bind the `SupportedLocales` contract in your app's service provider to wrap a single source of
-truth (used by `Translations`, `missingLocales`, `fromInput` — and by sluggable, see below):
+truth (used by `Translatable::supported()`, `isSupported()`, `fromInput()`, `rules()`,
+`missingLocales()` — and by sluggable, see below):
 
 ```php
 use RoundlyConsulting\Translatable\Contracts\SupportedLocales;
@@ -115,6 +116,84 @@ its own default with `bindIf()`, so provider order doesn't matter; your own `Slu
 in a later provider wins over both.
 
 ## Usage
+
+### The `Translatable` facade
+
+Everything that is not per-model state lives on the `Translatable` facade, over the injectable
+`TranslationManager` — the model trait below reads its locale set, fallback settings, locale-key
+validation and map resolution through the same manager.
+
+```php
+use RoundlyConsulting\Translatable\DataTransferObjects\TranslationChanges;
+use RoundlyConsulting\Translatable\DataTransferObjects\TranslationSearch;
+use RoundlyConsulting\Translatable\Enums\FallbackMode;
+use RoundlyConsulting\Translatable\Facades\Translatable;
+
+// Locales
+Translatable::supported();                        // ['en', 'sk'] — from the bound SupportedLocales
+Translatable::isSupported('sk');                  // true — exact, case-sensitive
+Translatable::currentLocale();                    // app()->getLocale()
+Translatable::ensureLocale($locale);              // returns it, or throws InvalidLocaleException (malformed)
+Translatable::ensureLocale($locale, strict: true); // … also throws when it is not supported
+
+// Fallback chain
+Translatable::fallbackMode();                     // FallbackMode, from config
+Translatable::fallbackLocale();                   // 'en'
+Translatable::resolve(['en' => 'Investing', 'sk' => 'Investovanie']);        // current locale + configured fallback
+Translatable::resolve($map, 'de', FallbackMode::Fallback, fallbackLocale: 'sk');
+
+// Admin input
+Translatable::fromInput($request->input('name')); // clean locale map (see below)
+Translatable::rules('name', required: true, each: ['max:120']);
+Translatable::filledRule('name');                 // just the "at least one locale" rule
+Translatable::apply($topic, TranslationChanges::make(['name' => ['sk' => 'Sporenie']])); // PATCH-merge
+
+// Queries and locale scoping
+Translatable::search(Topic::query(), new TranslationSearch(fields: ['name'], term: 'invest'));
+Translatable::usingLocale('sk', fn (): string => $topic->name);
+```
+
+`resolve()` is the same resolution a model read uses, for a raw map you hold outside a model (a
+cached payload, an API response, a config array): the requested locale (default: the current
+one), then — per the mode — the fallback locale, then the first non-blank value. Mode and fallback
+locale default to the configured ones; blank values never win.
+
+#### Without the facade
+
+Inject the manager — it is the facade's root, bound as a singleton, and exposes the identical
+API:
+
+```php
+use RoundlyConsulting\Translatable\Support\TranslationManager;
+
+final class UpdateTopicTranslations
+{
+    public function __construct(private TranslationManager $translations) {}
+
+    public function handle(Topic $topic, array $input): void
+    {
+        $topic->setTranslations('name', $this->translations->fromInput($input['name'] ?? []));
+    }
+}
+```
+
+There are no action classes: the package does pure locale-map computation, which the manager
+serves directly.
+
+#### Testing: no fake, by design
+
+The facade has no `fake()`. Nothing on it writes to the database, queues, mails, dispatches an
+event or calls out, so there is nothing for a fake to record. To pin behaviour in a test:
+
+```php
+config()->set('translatable.locales', ['en', 'de']);      // the locale set
+config()->set('translatable.fallback', FallbackMode::None); // the fallback chain
+
+// or override one method — facade calls and every model observe the subclass:
+Translatable::swap(new class extends TranslationManager {
+    public function supported(): array { return ['en', 'de']; }
+});
+```
 
 ### Translatable attributes
 
@@ -170,14 +249,17 @@ scalars (strings, or ints/floats cast to string), so a nested-array payload rais
 `InvalidTranslationValueException` instead of being stored. Turn on `strict_locales` to also reject
 well-formed keys that aren't in your supported list.
 
-**Route raw request maps through `Translations::fromInput()`** — it drops unsupported and blank
+**Route raw request maps through `Translatable::fromInput()`** — it drops unsupported and blank
 locales *before* they reach the model, so untrusted `$request->input('name')` never triggers a
 write-path exception:
 
 ```php
-$topic->setTranslations('name', Translations::fromInput($request->input('name')));
-// or validate first with Translations::rules('name', required: true)
+$topic->setTranslations('name', Translatable::fromInput($request->input('name')));
+// or validate first with Translatable::rules('name', required: true)
 ```
+
+Validating a single key yourself (a `?locale=` query parameter, a route segment) is
+`Translatable::ensureLocale($locale)` — or `Translatable::isSupported($locale)` for a boolean.
 
 ### Serialization (`toArray` / `toJson` / API Resources)
 
@@ -266,25 +348,6 @@ locale is swapped for the closure and always restored afterwards (even on an exc
 use RoundlyConsulting\Translatable\Facades\Translatable;
 
 $sk = Translatable::usingLocale('sk', fn (): string => $topic->name); // 'Investovanie'
-```
-
-### The `Translatable` facade
-
-The reusable toolkit is discoverable, injectable, and swappable in host tests via the `Translatable`
-facade over a bound `TranslationManager` (the static `Translations::…` helpers delegate to the same
-manager, so a swapped fake is observed everywhere):
-
-```php
-use RoundlyConsulting\Translatable\Facades\Translatable;
-
-$locales = Translatable::supported();                 // list<string>
-$map     = Translatable::fromInput($request->input('name'));
-$current = Translatable::currentLocale();
-$mode    = Translatable::fallbackMode();               // FallbackMode
-$fb      = Translatable::fallbackLocale();             // string
-
-// In a test:
-Translatable::swap($fakeManager);
 ```
 
 ### Fallback modes
@@ -386,16 +449,16 @@ How it fits together:
 
 ```php
 use RoundlyConsulting\Sluggable\Rules\UniqueSlug;
-use RoundlyConsulting\Translatable\Support\Translations;
+use RoundlyConsulting\Translatable\Facades\Translatable;
 
 public function rules(): array
 {
     // Extend the slug rules rather than re-declaring `slug`: a second `'slug' => […]` key would
     // silently replace `sometimes|array` and let a non-map value through.
-    $slug = Translations::rules('slug', required: false);
+    $slug = Translatable::rules('slug', required: false);
     $slug['slug'][] = UniqueSlug::for(Topic::class)->ignore($this->route('topic'));   // sluggable's rule
 
-    return [...Translations::rules('name', required: true), ...$slug];
+    return [...Translatable::rules('name', required: true), ...$slug];
 }
 ```
 
@@ -403,16 +466,22 @@ Cap length or add custom per-locale value rules via the `each` parameter (applie
 locale of the field):
 
 ```php
-...Translations::rules('name', required: true, each: ['max:120']);
+...Translatable::rules('name', required: true, each: ['max:120']);
 ```
 
-Other `Translations` helpers:
+Building your own rule list? Take only the "at least one locale is filled" rule:
 
-- `Translations::fromInput($input)` — normalise input into a locale map (a bare string becomes
+```php
+'name' => ['required', 'array', ...Translatable::filledRule('name')],
+```
+
+Other admin helpers:
+
+- `Translatable::fromInput($input)` — normalise input into a locale map (a bare string becomes
   the current locale; blank and unsupported locales are dropped). Ideal for DTO mapping.
-- `Translations::apply($model, new TranslationChanges([...]))` — PATCH-merge: only supplied
+- `Translatable::apply($model, new TranslationChanges([...]))` — PATCH-merge: only supplied
   locales are touched.
-- `Translations::whereLike($query, new TranslationSearch(fields: ['name'], term: 'invest'))` —
+- `Translatable::search($query, new TranslationSearch(fields: ['name'], term: 'invest'))` —
   per-locale, case-insensitive search across the supported locales (`ilike` on PostgreSQL, `like`
   everywhere else).
 
