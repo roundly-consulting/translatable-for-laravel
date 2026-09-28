@@ -74,7 +74,8 @@ return [
 
     // Reject any locale key not in the supported list on writes (malformed keys are always
     // rejected regardless). Off by default, so any well-formed locale is accepted.
-    'strict_locales' => (bool) env('TRANSLATABLE_STRICT_LOCALES', false),
+    // Env words are read as booleans (on/off, yes/no, true/false, 1/0).
+    'strict_locales' => filter_var(env('TRANSLATABLE_STRICT_LOCALES', false), FILTER_VALIDATE_BOOL),
 
     // Default supported locales. Hosts SHOULD rebind SupportedLocales to their own source.
     'locales' => ['en', 'sk'],
@@ -83,9 +84,9 @@ return [
 
 | Key | Type | Default | Env | Purpose |
 |-----|------|---------|-----|---------|
-| `fallback_locale` | `string` | `app.fallback_locale` / `en` | `TRANSLATABLE_FALLBACK_LOCALE` | Locale tried after the exact one. |
+| `fallback_locale` | `string` | `app.fallback_locale` / `en` | `TRANSLATABLE_FALLBACK_LOCALE` | Locale tried after the exact one. Empty = no fallback locale. |
 | `fallback` | `FallbackMode` | `FallbackMode::Any` | `TRANSLATABLE_FALLBACK` (`none`/`fallback`/`any`) | How far the fallback chain reaches. |
-| `strict_locales` | `bool` | `false` | `TRANSLATABLE_STRICT_LOCALES` | Reject writes for locales outside the supported list. |
+| `strict_locales` | `bool` | `false` | `TRANSLATABLE_STRICT_LOCALES` (`on`/`off`, `yes`/`no`, `true`/`false`, `1`/`0`) | Reject writes for locales outside the supported list. |
 | `locales` | `list<string>` | `['en', 'sk']` | — | Default supported locales. |
 
 The package works with **zero** host configuration. Slug options (separator, word cap, reserved
@@ -155,8 +156,15 @@ Translatable::usingLocale('sk', fn (): string => $topic->name);
 
 `resolve()` is the same resolution a model read uses, for a raw map you hold outside a model (a
 cached payload, an API response, a config array): the requested locale (default: the current
-one), then — per the mode — the fallback locale, then the first non-blank value. Mode and fallback
-locale default to the configured ones; blank values never win.
+one), then — per the mode — the fallback locale, then the first non-blank value in
+supported-locale order. Mode and fallback locale default to the configured ones. Blank values
+never win: `null`, `''`, booleans, arrays and objects are skipped, ints and floats are cast to
+strings — a messy map resolves, it never throws:
+
+```php
+Translatable::resolve(['en' => null, 'sk' => 'Ahoj'], 'de'); // 'Ahoj'
+Translatable::resolve(['sk' => 5], 'de');                   // '5'
+```
 
 #### Without the facade
 
@@ -235,6 +243,7 @@ $topic->isTranslatableAttribute('name');      // bool
 $topic->getTranslatableAttributes();          // list<string>
 $topic->name = 'Investing';                   // sets the APP locale value
 $topic->name = ['en' => 'Investing', 'sk' => 'Investovanie']; // replaces the map
+$topic->update(['name->sk' => 'Sporenie']);   // JSON-path key: patches one locale, same guards
 ```
 
 Blank/`null` values are dropped, so a map never stores an empty string and the fallback chain
@@ -242,15 +251,19 @@ always has something real to fall back to.
 
 ### Locale keys are validated on write
 
-Every write path (`$model->name = [...]`, `setTranslation`, `setTranslations`, mass assignment)
-validates its locale **keys**. Malformed keys — anything with quotes, spaces, markup or SQL, e.g.
-a mass-assigned `name[<script>]=…` — are rejected with an `InvalidLocaleException`; values must be
-scalars (strings, or ints/floats cast to string), so a nested-array payload raises an
+Every model write path (`$model->name = …`, `setTranslation`, `setTranslations`, mass assignment
+— including JSON-path keys such as `update(['name->de' => …])`) validates its locale **keys**.
+Malformed keys — anything with quotes, spaces, markup or SQL, e.g. a mass-assigned
+`name[<script>]=…` — are rejected with an `InvalidLocaleException`; values must be strings, or
+ints/floats (cast to string), so a nested array, a boolean or an object raises an
 `InvalidTranslationValueException` instead of being stored. Turn on `strict_locales` to also reject
-well-formed keys that aren't in your supported list.
+well-formed keys that aren't in your supported list. (A query-builder update such as
+`Topic::query()->update([...])` never builds a model, so it bypasses these guards like any other
+Eloquent attribute logic.)
 
 **Route raw request maps through `Translatable::fromInput()`** — it drops unsupported and blank
-locales *before* they reach the model, so untrusted `$request->input('name')` never triggers a
+locales *before* they reach the model (a bare string maps to the current locale, and is dropped
+too when that locale isn't supported), so untrusted `$request->input('name')` never triggers a
 write-path exception:
 
 ```php
@@ -305,6 +318,9 @@ Add the `DispatchesTranslationEvents` trait to have the model dispatch a single
 ideal for queuing an AI service to fill `missingLocales()` or busting a cache, without overriding
 the model. The base `HasTranslations` trait stays side-effect-free; nothing fires unless you opt in.
 
+"Changed" means the decoded map changed: PostgreSQL and MySQL hand JSON back re-spaced and
+key-reordered, and re-saving an unchanged map is neither an UPDATE nor an event on any engine.
+
 ```php
 use RoundlyConsulting\Translatable\Concerns\DispatchesTranslationEvents;
 use RoundlyConsulting\Translatable\Concerns\HasTranslations;
@@ -356,7 +372,10 @@ The `FallbackMode` enum drives resolution:
 
 - `FallbackMode::None` — exact requested locale only.
 - `FallbackMode::Fallback` — exact, then the configured fallback locale.
-- `FallbackMode::Any` — exact, then fallback locale, then the first available value.
+- `FallbackMode::Any` — exact, then fallback locale, then the first available value, walking the
+  supported locales in order and then any other stored locale alphabetically. The pick never
+  depends on how the database orders JSON keys, so a row renders the same language on every
+  engine and before and after a reload.
 
 > **Cross-locale disclosure with `Any` (the shipped default).** When both the requested and
 > fallback locales are empty, `Any` renders the **first available** locale's value — so content you
@@ -478,12 +497,14 @@ Building your own rule list? Take only the "at least one locale is filled" rule:
 Other admin helpers:
 
 - `Translatable::fromInput($input)` — normalise input into a locale map (a bare string becomes
-  the current locale; blank and unsupported locales are dropped). Ideal for DTO mapping.
+  the current locale; blank and unsupported locales are dropped, a bare string's locale
+  included). Ideal for DTO mapping.
 - `Translatable::apply($model, new TranslationChanges([...]))` — PATCH-merge: only supplied
   locales are touched.
 - `Translatable::search($query, new TranslationSearch(fields: ['name'], term: 'invest'))` —
   per-locale, case-insensitive search across the supported locales (`ilike` on PostgreSQL, `like`
-  everywhere else).
+  everywhere else). A search with no fields (or no supported locale) searches nothing and
+  matches no rows.
 
   The term is treated as a **literal substring**: `%`, `_` and `\` are escaped, and the SQL states
   its escape character explicitly, so a search for `100%` or `a_b` finds exactly those rows on
@@ -511,8 +532,9 @@ there is **no data migration** when adopting this package.
 ### `php artisan about`
 
 The package contributes a `Translatable` section reporting its shape — how many locales are
-configured and where they come from, the fallback mode, the fallback-locale and strict-locale
-switches:
+configured and where they come from, the fallback mode, whether the fallback locale is the app's
+(`DEFAULT` — equal to `app.fallback_locale`), overridden (`SET`) or empty (`NONE`), and the
+strict-locale switch (`ON`/`OFF`):
 
 ```bash
 php artisan about --only=translatable
