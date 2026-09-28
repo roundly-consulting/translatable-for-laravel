@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Artisan;
+
 /**
  * The secret-safe `about` capture (A).
  *
@@ -44,3 +46,25 @@ it('never renders a configured locale', function (): void {
         ],
     );
 });
+
+/**
+ * The "Fallback locale" row is a switch, so it must be able to show every position: the
+ * shipped default follows `app.fallback_locale` (DEFAULT), an override is SET, and an unset
+ * or blank value means no fallback locale at all (NONE). It used to read SET unconditionally,
+ * because the shipped default resolves to a string and only `null` read as DEFAULT.
+ */
+it('reports whether the fallback locale is the app default, overridden or unset', function (mixed $configured, string $expected): void {
+    config()->set('app.fallback_locale', 'en');
+    config()->set('translatable.fallback_locale', $configured);
+
+    Artisan::call('about', ['--only' => 'translatable']);
+    $row = collect(explode("\n", Artisan::output()))
+        ->first(static fn (string $line): bool => str_contains($line, 'Fallback locale'));
+
+    expect(trim((string) $row))->toEndWith(' '.$expected);
+})->with([
+    'the shipped default' => ['en', 'DEFAULT'],
+    'an override' => ['sk', 'SET'],
+    'unset' => [null, 'NONE'],
+    'blank' => ['', 'NONE'],
+]);
