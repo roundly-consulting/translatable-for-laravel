@@ -54,6 +54,21 @@ it('exposes the locale helpers through the facade', function (): void {
         ->and(Translatable::fallbackLocale())->toBe('en');
 });
 
+it('drops a bare string when the current locale is not supported', function (): void {
+    app()->setLocale('de');
+
+    expect(Translatable::fromInput('Hallo'))->toBe([]);
+});
+
+it('never hands the write path a bare-string locale strict mode rejects', function (): void {
+    config()->set('translatable.strict_locales', true);
+    app()->setLocale('de');
+
+    $topic = (new Topic)->setTranslations('name', Translatable::fromInput('Hallo'));
+
+    expect($topic->getTranslations('name'))->toBe([]);
+});
+
 it('reads the configured fallback mode and locale', function (): void {
     config()->set('translatable.fallback', 'fallback');
     config()->set('translatable.fallback_locale', 'sk');

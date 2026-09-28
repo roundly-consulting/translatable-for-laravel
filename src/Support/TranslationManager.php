@@ -92,14 +92,18 @@ class TranslationManager
 
     /**
      * Normalise arbitrary input into a locale map:
-     * a bare string becomes the current locale; blank + unsupported locales are dropped.
+     * a bare string becomes the current locale; blank + unsupported locales are dropped —
+     * including the current locale a bare string maps to, so the result only ever carries
+     * supported locales (and `strict_locales` accepts it).
      *
      * @return array<string, string>
      */
     public function fromInput(mixed $input): array
     {
         if (is_string($input)) {
-            return $input === '' ? [] : [$this->currentLocale() => $input];
+            $locale = $this->currentLocale();
+
+            return $input === '' || ! $this->isSupported($locale) ? [] : [$locale => $input];
         }
 
         if (! is_array($input)) {
