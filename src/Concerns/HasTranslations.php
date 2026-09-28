@@ -7,6 +7,7 @@ namespace RoundlyConsulting\Translatable\Concerns;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use JsonException;
+use RoundlyConsulting\PackageToolkit\Support\Config;
 use RoundlyConsulting\Translatable\Enums\FallbackMode;
 use RoundlyConsulting\Translatable\Exceptions\InvalidTranslationValueException;
 use RoundlyConsulting\Translatable\Exceptions\NotATranslatableAttributeException;
@@ -561,7 +562,7 @@ trait HasTranslations
         // supported-set check, so a swapped `supported()` is honoured.
         LocaleGuard::ensure($locale);
 
-        $this->translationManager()->ensureLocale($locale, (bool) config('translatable.strict_locales', false));
+        $this->translationManager()->ensureLocale($locale, Config::boolean('translatable.strict_locales'));
     }
 
     /**

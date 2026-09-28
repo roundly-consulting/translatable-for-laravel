@@ -9,6 +9,7 @@ use Illuminate\Database\Schema\ColumnDefinition;
 use Illuminate\Support\Facades\Blade;
 use RoundlyConsulting\PackageToolkit\Package;
 use RoundlyConsulting\PackageToolkit\PackageServiceProvider;
+use RoundlyConsulting\PackageToolkit\Support\Config;
 use RoundlyConsulting\Sluggable\Contracts\SlugLocales;
 use RoundlyConsulting\Translatable\Contracts\SupportedLocales;
 use RoundlyConsulting\Translatable\Support\ConfigSupportedLocales;
@@ -75,7 +76,7 @@ final class TranslatableServiceProvider extends PackageServiceProvider
                 $fallbackLocale === config('app.fallback_locale') => 'DEFAULT',
                 default => 'SET',
             },
-            'Strict locales' => config('translatable.strict_locales') === true ? 'ON' : 'OFF',
+            'Strict locales' => Config::boolean('translatable.strict_locales') ? 'ON' : 'OFF',
         ];
     }
 
