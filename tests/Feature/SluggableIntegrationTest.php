@@ -128,7 +128,7 @@ describe('HasTranslations + HasSlug', function (): void {
 
         config()->set('translatable.strict_locales', true);
 
-        expect(fn () => $topic->regenerateSlugs())->toThrow(InvalidLocaleException::class);
+        expect(fn () => $topic->regenerateSlugs(locales: ['de']))->toThrow(InvalidLocaleException::class);
     });
 
     it('resolves a route binding by the current-locale slug', function (): void {
