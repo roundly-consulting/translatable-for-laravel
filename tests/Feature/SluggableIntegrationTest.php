@@ -17,8 +17,8 @@ use RoundlyConsulting\Sluggable\Support\ConfigSlugLocales;
 use RoundlyConsulting\Translatable\Contracts\SupportedLocales;
 use RoundlyConsulting\Translatable\Exceptions\InvalidLocaleException;
 use RoundlyConsulting\Translatable\Exceptions\NotATranslatableAttributeException;
+use RoundlyConsulting\Translatable\Facades\Translatable;
 use RoundlyConsulting\Translatable\Support\TranslatableSlugLocales;
-use RoundlyConsulting\Translatable\Support\Translations;
 use RoundlyConsulting\Translatable\Tests\Fixtures\SluggedTopic;
 use RoundlyConsulting\Translatable\Tests\Fixtures\Topic;
 use RoundlyConsulting\Translatable\Tests\Fixtures\UncontractedSluggedTopic;
@@ -219,10 +219,10 @@ describe('the README admin validation', function (): void {
         // Verbatim from the README's "Admin validation" rules(): the slug rules are extended,
         // not replaced, so `sometimes|array` survives next to sluggable's rule.
         $rules = (function (?SluggedTopic $topic): array {
-            $slug = Translations::rules('slug', required: false);
+            $slug = Translatable::rules('slug', required: false);
             $slug['slug'][] = UniqueSlug::for(SluggedTopic::class)->ignore($topic);
 
-            return [...Translations::rules('name', required: true), ...$slug];
+            return [...Translatable::rules('name', required: true), ...$slug];
         })(null);
 
         $passes = fn (array $data): bool => Validator::make($data, $rules)->passes();

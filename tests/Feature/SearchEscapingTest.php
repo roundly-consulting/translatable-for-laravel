@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\Schema;
 use RoundlyConsulting\Translatable\DataTransferObjects\TranslationSearch;
-use RoundlyConsulting\Translatable\Support\Translations;
+use RoundlyConsulting\Translatable\Facades\Translatable;
 use RoundlyConsulting\Translatable\Tests\Fixtures\Topic;
 
 /**
@@ -29,7 +29,7 @@ function seedWildcardTopics(): void
 /** @return list<string> */
 function searchNames(string $term): array
 {
-    return Translations::whereLike(
+    return Translatable::search(
         Topic::query(),
         new TranslationSearch(fields: ['name'], term: $term),
     )->get()->map(static fn (Topic $topic): string => (string) $topic->getTranslation('name', 'en'))->all();

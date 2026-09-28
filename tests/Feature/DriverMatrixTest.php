@@ -6,8 +6,8 @@ use Illuminate\Support\Facades\DB;
 use RoundlyConsulting\PackageToolkit\Enums\DatabaseDriver;
 use RoundlyConsulting\Testing\Database\DriverMatrix;
 use RoundlyConsulting\Translatable\DataTransferObjects\TranslationSearch;
+use RoundlyConsulting\Translatable\Facades\Translatable;
 use RoundlyConsulting\Translatable\Support\ConnectionDriver;
-use RoundlyConsulting\Translatable\Support\Translations;
 use RoundlyConsulting\Translatable\Tests\Fixtures\Topic;
 
 /**
@@ -76,7 +76,7 @@ it('treats wildcards in a search term as literals on the configured engine', fun
     Topic::query()->create(['name' => ['en' => 'a_b literal']]);
     Topic::query()->create(['name' => ['en' => 'axb wildcarded']]);
 
-    $search = static fn (string $term): array => Translations::whereLike(
+    $search = static fn (string $term): array => Translatable::search(
         Topic::query(),
         new TranslationSearch(fields: ['name'], term: $term),
     )->get()->map(static fn (Topic $t): string => (string) $t->getTranslation('name', 'en'))->all();
@@ -110,7 +110,7 @@ it('searches case-insensitively on the configured engine', function (): void {
     Topic::query()->create(['name' => ['en' => 'COTTON canvas bag']]);
     Topic::query()->create(['name' => ['en' => 'linen towel']]);
 
-    $search = static fn (string $term): array => Translations::whereLike(
+    $search = static fn (string $term): array => Translatable::search(
         Topic::query(),
         new TranslationSearch(fields: ['name'], term: $term),
     )->get()->map(static fn (Topic $t): string => (string) $t->getTranslation('name', 'en'))->all();

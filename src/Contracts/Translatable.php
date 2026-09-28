@@ -9,7 +9,7 @@ use RoundlyConsulting\Sluggable\Contracts\ProvidesLocaleMaps;
 /**
  * The public translation API a model gains from the HasTranslations trait.
  *
- * Consumer models `implements Translatable` so the support classes (Translations::apply,
+ * Consumer models `implements Translatable` so the manager (Translatable::apply(),
  * validation helpers, …) can type-hint against the surface without touching Eloquent internals.
  *
  * It extends sluggable's ProvidesLocaleMaps, so sluggable reads and writes translatable

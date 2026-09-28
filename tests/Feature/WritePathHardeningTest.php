@@ -7,7 +7,7 @@ use RoundlyConsulting\Translatable\Exceptions\InvalidLocaleException;
 use RoundlyConsulting\Translatable\Exceptions\InvalidTranslationValueException;
 use RoundlyConsulting\Translatable\Exceptions\NotATranslatableAttributeException;
 use RoundlyConsulting\Translatable\Exceptions\TranslatableException;
-use RoundlyConsulting\Translatable\Support\Translations;
+use RoundlyConsulting\Translatable\Facades\Translatable;
 use RoundlyConsulting\Translatable\Tests\Fixtures\Topic;
 
 beforeEach(function (): void {
@@ -65,7 +65,7 @@ it('rejects a well-formed but unsupported locale in strict mode', function (): v
 
 it('keeps the safe fromInput ingestion path working', function (): void {
     // Junk keys are dropped BEFORE they reach the model, so the write path never sees them.
-    $map = Translations::fromInput(['en' => 'Investing', '<script>' => 'x', 'sk' => 'Investovanie']);
+    $map = Translatable::fromInput(['en' => 'Investing', '<script>' => 'x', 'sk' => 'Investovanie']);
     $topic = new Topic(['name' => $map]);
 
     expect($topic->getTranslations('name'))->toBe(['en' => 'Investing', 'sk' => 'Investovanie']);

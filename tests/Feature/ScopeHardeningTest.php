@@ -5,7 +5,7 @@ declare(strict_types=1);
 use RoundlyConsulting\Translatable\DataTransferObjects\TranslationSearch;
 use RoundlyConsulting\Translatable\Exceptions\InvalidLocaleException;
 use RoundlyConsulting\Translatable\Exceptions\NotATranslatableAttributeException;
-use RoundlyConsulting\Translatable\Support\Translations;
+use RoundlyConsulting\Translatable\Facades\Translatable;
 use RoundlyConsulting\Translatable\Tests\Fixtures\Topic;
 
 beforeEach(function (): void {
@@ -35,7 +35,7 @@ it('guards whereHasLocale and whereMissingLocale', function (): void {
 // F9 — LIKE wildcards in the search term are escaped (value stays bound).
 
 it('escapes LIKE wildcards in the search term', function (): void {
-    $query = Translations::whereLike(
+    $query = Translatable::search(
         Topic::query(),
         new TranslationSearch(fields: ['name'], term: '50%_x'),
     );
