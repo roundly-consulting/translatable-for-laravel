@@ -19,7 +19,7 @@ use RoundlyConsulting\Translatable\Support\TranslationManager;
  * @method static bool isSupported(string $locale)
  * @method static string currentLocale()
  * @method static string ensureLocale(string $locale, bool $strict = false)
- * @method static string|null resolve(array<string, string> $map, string|null $locale = null, \RoundlyConsulting\Translatable\Enums\FallbackMode|null $mode = null, string|null $fallbackLocale = null)
+ * @method static string|null resolve(array<array-key, mixed> $map, string|null $locale = null, \RoundlyConsulting\Translatable\Enums\FallbackMode|null $mode = null, string|null $fallbackLocale = null)
  * @method static array<string, string> fromInput(mixed $input)
  * @method static \RoundlyConsulting\Translatable\Enums\FallbackMode fallbackMode()
  * @method static string fallbackLocale()

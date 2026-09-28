@@ -119,6 +119,18 @@ it('skips non-scalar stored values on read without warnings', function (): void 
     expect($topic->getTranslations('name'))->toBe(['sk' => 'Investovanie']);
 });
 
+it('skips stored booleans on read instead of reading true as "1"', function (): void {
+    $this->createTopicsTable();
+
+    $id = DB::table('topics')->insertGetId([
+        'name' => json_encode(['en' => true, 'de' => false, 'sk' => 'Investovanie']),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    expect(Topic::query()->findOrFail($id)->getTranslations('name'))->toBe(['sk' => 'Investovanie']);
+});
+
 // F11 — guardTranslatable on the read helpers.
 
 it('guards hasTranslation against a non-translatable attribute', function (): void {

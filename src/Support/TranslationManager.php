@@ -71,18 +71,22 @@ class TranslationManager
     /**
      * Resolve a raw locale map to one value through the fallback chain: the requested locale
      * (default: the current one), then — per the mode — the fallback locale, then the first
-     * non-blank value. Mode and fallback locale default to the configured ones. Blank values
-     * never win.
+     * non-blank value in supported-locale order (then the other locales alphabetically). Mode
+     * and fallback locale default to the configured ones. Blank values never win: null, '',
+     * booleans, arrays and objects are skipped, ints and floats are cast to strings.
      *
-     * @param  array<string, string>  $map
+     * @param  array<array-key, mixed>  $map
      */
     public function resolve(array $map, ?string $locale = null, ?FallbackMode $mode = null, ?string $fallbackLocale = null): ?string
     {
+        $mode ??= $this->fallbackMode();
+
         return (new FallbackResolver)->resolve(
             $map,
             $locale ?? $this->currentLocale(),
             $fallbackLocale ?? $this->fallbackLocale(),
-            $mode ?? $this->fallbackMode(),
+            $mode,
+            $mode === FallbackMode::Any ? $this->supported() : [],
         );
     }
 

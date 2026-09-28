@@ -13,6 +13,7 @@ use RoundlyConsulting\Translatable\Exceptions\NotATranslatableAttributeException
 use RoundlyConsulting\Translatable\Exceptions\TranslatableException;
 use RoundlyConsulting\Translatable\Support\LocaleGuard;
 use RoundlyConsulting\Translatable\Support\TranslationManager;
+use RoundlyConsulting\Translatable\Support\TranslationValue;
 use stdClass;
 
 /**
@@ -446,13 +447,13 @@ trait HasTranslations
         $map = [];
 
         foreach ($decoded as $locale => $value) {
-            // Skip nested arrays/objects that can't be represented as a locale string,
-            // rather than `(string)`-casting them into an "Array to string" warning.
-            if (! is_scalar($value) || $value === '') {
-                continue;
-            }
+            // Skip what the write path would refuse (nested arrays/objects, booleans) rather
+            // than `(string)`-casting it into "Array to string" or a `true` that reads as "1".
+            $value = TranslationValue::readable($value);
 
-            $map[(string) $locale] = (string) $value;
+            if ($value !== null) {
+                $map[(string) $locale] = $value;
+            }
         }
 
         return $map;
