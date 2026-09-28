@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use RoundlyConsulting\Translatable\Exceptions\InvalidLocaleException;
 use RoundlyConsulting\Translatable\Exceptions\InvalidTranslationValueException;
 use RoundlyConsulting\Translatable\Exceptions\NotATranslatableAttributeException;
@@ -131,4 +133,82 @@ it('guards getTranslatedLocales against a non-translatable attribute', function 
 
     expect(fn () => $topic->getTranslatedLocales('password'))
         ->toThrow(NotATranslatableAttributeException::class);
+});
+
+// JSON-path writes (`name->de`) are a model write path too: Eloquent would hand them to
+// fillJsonAttribute(), which never sees the locale-key or value guards.
+
+it('rejects a malformed locale key on a JSON-path mass assignment', function (): void {
+    $this->createTopicsTable();
+
+    expect(fn () => Topic::query()->create(['name' => ['en' => 'a'], 'name->bad key"' => 'v']))
+        ->toThrow(InvalidLocaleException::class)
+        ->and(Topic::query()->count())->toBe(0);
+});
+
+it('rejects a JSON path nested below a locale', function (): void {
+    expect(fn () => new Topic(['name->en->nested' => 'v']))
+        ->toThrow(InvalidLocaleException::class);
+});
+
+it('enforces strict_locales on a JSON-path write', function (): void {
+    $this->createTopicsTable();
+    config()->set('translatable.strict_locales', true);
+
+    expect(fn () => Topic::query()->create(['name' => ['en' => 'a'], 'name->de' => 'v']))
+        ->toThrow(InvalidLocaleException::class)
+        ->and(Topic::query()->count())->toBe(0);
+});
+
+it('validates a JSON-path value like setTranslation', function (): void {
+    expect(fn () => new Topic(['name->en' => ['nested']]))
+        ->toThrow(InvalidTranslationValueException::class)
+        ->and(fn () => new Topic(['name->en' => true]))
+        ->toThrow(InvalidTranslationValueException::class);
+});
+
+it('treats a JSON-path update as a single-locale patch', function (): void {
+    $this->createTopicsTable();
+    $topic = Topic::query()->create(['name' => ['en' => 'Investing']]);
+
+    $topic->update(['name->sk' => 'Investovanie']);
+    expect(Topic::query()->find($topic->id)?->getTranslations('name'))
+        ->toBe(['en' => 'Investing', 'sk' => 'Investovanie']);
+
+    $topic->update(['name->sk' => null]);
+    expect(Topic::query()->find($topic->id)?->getTranslations('name'))->toBe(['en' => 'Investing']);
+});
+
+it('leaves JSON-path writes to other json columns to Eloquent', function (): void {
+    $this->createTopicsTable();
+    Schema::table('topics', function (Blueprint $table): void {
+        $table->json('meta')->nullable();
+    });
+
+    $topic = Topic::query()->create(['name' => ['en' => 'Investing'], 'meta->any key' => 'v']);
+
+    expect(json_decode((string) $topic->getRawOriginal('meta'), true))->toBe(['any key' => 'v']);
+});
+
+// Assigning one value to the current locale runs the same value validation as a map write.
+
+it('rejects a boolean assigned to the current locale instead of casting it', function (): void {
+    $topic = new Topic(['name' => ['en' => 'Investing']]);
+
+    expect(fn () => $topic->name = true)->toThrow(InvalidTranslationValueException::class)
+        ->and(fn () => $topic->name = false)->toThrow(InvalidTranslationValueException::class)
+        ->and($topic->getTranslations('name'))->toBe(['en' => 'Investing']);
+});
+
+it('rejects an object assigned to the current locale with a typed exception', function (): void {
+    $topic = new Topic;
+
+    expect(fn () => $topic->name = new stdClass)->toThrow(InvalidTranslationValueException::class);
+});
+
+it('casts an int assigned to the current locale', function (): void {
+    $topic = new Topic;
+    $topic->name = 42;
+
+    expect($topic->getTranslations('name'))->toBe(['en' => '42']);
 });

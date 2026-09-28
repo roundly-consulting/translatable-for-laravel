@@ -67,13 +67,26 @@ trait HasTranslations
     {
         if ($this->isTranslatableAttribute($key)) {
             if (is_array($value)) {
-                /** @var array<string, string> $value */
+                /** @var array<string, mixed> $value */
                 $this->writeMap($key, $value);
             } else {
-                $this->setTranslation($key, $this->currentLocale(), $value === null ? null : (string) $value);
+                $this->writeTranslation($key, $this->currentLocale(), $value);
             }
 
             return $this;
+        }
+
+        // A JSON-path key (`name->de`, from update()/fill()/forceFill()) would otherwise reach
+        // Eloquent's fillJsonAttribute() and skip every locale-key and value guard. The whole
+        // remainder is the locale, so a nested path (`name->en->x`) fails the format check.
+        if (str_contains($key, '->')) {
+            [$column, $locale] = explode('->', $key, 2);
+
+            if ($this->isTranslatableAttribute($column)) {
+                $this->writeTranslation($column, $locale, $value);
+
+                return $this;
+            }
         }
 
         return parent::setAttribute($key, $value);
@@ -102,17 +115,7 @@ trait HasTranslations
     public function setTranslation(string $key, string $locale, ?string $value): static
     {
         $this->guardTranslatable($key);
-        $this->guardLocale($locale);
-
-        $map = $this->readMap($key);
-
-        if ($value === null || $value === '') {
-            unset($map[$locale]);
-        } else {
-            $map[$locale] = $value;
-        }
-
-        $this->writeMap($key, $map);
+        $this->writeTranslation($key, $locale, $value);
 
         return $this;
     }
@@ -426,6 +429,26 @@ trait HasTranslations
         }
 
         return $map;
+    }
+
+    /**
+     * Set (or, for null/'', forget) one locale of a translatable attribute. The single-value
+     * write every path shares — setTranslation(), `$model->name = 'x'` and `name->sk` keys —
+     * so each validates its locale and value exactly like a map write.
+     */
+    protected function writeTranslation(string $key, string $locale, mixed $value): void
+    {
+        $this->guardLocale($locale);
+
+        $map = $this->readMap($key);
+
+        if ($value === null || $value === '') {
+            unset($map[$locale]);
+        } else {
+            $map[$locale] = $this->normalizeTranslationValue($locale, $value);
+        }
+
+        $this->writeMap($key, $map);
     }
 
     /**
