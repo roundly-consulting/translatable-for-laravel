@@ -92,6 +92,33 @@ trait HasTranslations
         return parent::setAttribute($key, $value);
     }
 
+    /**
+     * Compare a translatable attribute by its decoded map, not its raw JSON string. PostgreSQL
+     * `jsonb` and MySQL `JSON` return a stored map re-spaced and key-reordered, so a string
+     * comparison marked an untouched map dirty — a spurious UPDATE and TranslationsChanged
+     * event. A NULL column and an empty map both mean "no translations".
+     *
+     * @param  string  $key
+     */
+    public function originalIsEquivalent($key): bool
+    {
+        if (! $this->isTranslatableAttribute($key) || ! array_key_exists($key, $this->original)) {
+            return parent::originalIsEquivalent($key);
+        }
+
+        $current = $this->decodeStoredMap($this->attributes[$key] ?? null);
+        $original = $this->decodeStoredMap($this->original[$key]);
+
+        if ($current === null || $original === null) {
+            return parent::originalIsEquivalent($key);
+        }
+
+        ksort($current, SORT_STRING);
+        ksort($original, SORT_STRING);
+
+        return $current === $original;
+    }
+
     public function getTranslation(string $key, ?string $locale = null, bool $useFallback = true): ?string
     {
         $this->guardTranslatable($key);
@@ -429,6 +456,23 @@ trait HasTranslations
         }
 
         return $map;
+    }
+
+    /**
+     * A raw stored value as a map: NULL is empty and JSON is decoded; anything that is not a
+     * JSON object (a legacy scalar, invalid JSON) is `null`, so the caller compares it raw.
+     *
+     * @return array<array-key, mixed>|null
+     */
+    private function decodeStoredMap(mixed $raw): ?array
+    {
+        if ($raw === null) {
+            return [];
+        }
+
+        $decoded = is_string($raw) ? json_decode($raw, true) : $raw;
+
+        return is_array($decoded) ? $decoded : null;
     }
 
     /**
