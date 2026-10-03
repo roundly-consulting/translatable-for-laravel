@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Validator;
+use RoundlyConsulting\PackageToolkit\Exceptions\InvalidConfigurationException;
 use RoundlyConsulting\Sluggable\Contracts\ProvidesLocaleMaps;
 use RoundlyConsulting\Sluggable\Contracts\SlugLocales;
 use RoundlyConsulting\Sluggable\DataTransferObjects\SlugIndexSpec;
@@ -205,11 +206,12 @@ describe('the SlugLocales binding', function (): void {
 
     it('refuses a malformed supported locale before it reaches index DDL', function (): void {
         // The removed TranslatableSlug::uniqueIndexes() allowlisted every locale before its DDL;
-        // sluggable reads the list from this adapter when a spec names none.
+        // sluggable reads the list from this adapter when a spec names none. The config read
+        // itself now refuses it (strict config), earlier than the DDL guard.
         config()->set('translatable.locales', ['en', "sk'); drop table topics; --"]);
 
         SlugIndexes::plan(SlugIndexSpec::localeMap('topics', 'slug'));
-    })->throws(InvalidLocaleException::class);
+    })->throws(InvalidConfigurationException::class, 'translatable.locales.1');
 });
 
 describe('the README admin validation', function (): void {

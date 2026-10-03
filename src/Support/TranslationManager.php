@@ -7,6 +7,7 @@ namespace RoundlyConsulting\Translatable\Support;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use RoundlyConsulting\PackageToolkit\Exceptions\InvalidConfigurationException;
 use RoundlyConsulting\PackageToolkit\Support\Config;
 use RoundlyConsulting\PackageToolkit\Support\LikeEscaper;
 use RoundlyConsulting\PackageToolkit\Support\RawExpression;
@@ -144,9 +145,23 @@ class TranslationManager
         return Config::enum('translatable.fallback', FallbackMode::class);
     }
 
+    /**
+     * The global fallback locale. Unset or blank means "no fallback locale" (documented);
+     * anything else must be a well-formed locale key, or it throws instead of being cast and
+     * then silently never matching.
+     */
     public function fallbackLocale(): string
     {
-        return (string) config('translatable.fallback_locale', 'en');
+        $locale = config('translatable.fallback_locale', 'en') ?? '';
+
+        if (! is_string($locale) || ($locale !== '' && ! LocaleGuard::isValid($locale))) {
+            throw new InvalidConfigurationException(sprintf(
+                'Configuration value [translatable.fallback_locale] must be a locale key such as `en` (or empty for none), [%s] given.',
+                is_scalar($locale) ? var_export($locale, true) : get_debug_type($locale),
+            ));
+        }
+
+        return $locale;
     }
 
     /**
