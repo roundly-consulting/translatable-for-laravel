@@ -85,10 +85,10 @@ return [
 
 | Key | Type | Default | Env | Purpose |
 |-----|------|---------|-----|---------|
-| `fallback_locale` | `string` | `app.fallback_locale` / `en` | `TRANSLATABLE_FALLBACK_LOCALE` | Locale tried after the exact one. Empty = no fallback locale. |
+| `fallback_locale` | `string` | `app.fallback_locale` / `en` | `TRANSLATABLE_FALLBACK_LOCALE` | Locale tried after the exact one. Empty (or unset) = no fallback locale; anything else must be a well-formed locale key (`en`, `pt-BR`) or it throws the toolkit's `InvalidConfigurationException`. |
 | `fallback` | `FallbackMode\|string` | `FallbackMode::Any` | `TRANSLATABLE_FALLBACK` (`none`/`fallback`/`any`) | How far the fallback chain reaches. Any other value throws the toolkit's `InvalidConfigurationException` on the first read. |
 | `strict_locales` | `bool` | `false` | `TRANSLATABLE_STRICT_LOCALES` (`on`/`off`, `yes`/`no`, `true`/`false`, `1`/`0`) | Reject writes for locales outside the supported list. Any other value throws the toolkit's `InvalidConfigurationException` on the first write. |
-| `locales` | `list<string>` | `['en', 'sk']` | — | Default supported locales. |
+| `locales` | `list<string>` | `['en', 'sk']` | — | Default supported locales. Must be a list of well-formed locale keys; a non-list or a bad entry throws the toolkit's `InvalidConfigurationException` naming it. |
 
 The package works with **zero** host configuration. Slug options (separator, word cap, reserved
 words, …) live in `config/sluggable.php`.
