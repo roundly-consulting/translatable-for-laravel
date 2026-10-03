@@ -133,30 +133,32 @@ class TranslationManager
     }
 
     /**
-     * The effective global fallback mode from config: `Any` when unset, and a throw for a
-     * value that names no mode — a typo must not silently widen the chain to `Any`.
+     * The effective global fallback mode from config: `Any` when not set (absent, null or
+     * blank), and a throw for a value that names no mode — a typo must not silently widen
+     * the chain to `Any`.
      */
     public function fallbackMode(): FallbackMode
     {
-        if (config('translatable.fallback') === null) {
-            return FallbackMode::Any;
-        }
-
-        return Config::enum('translatable.fallback', FallbackMode::class);
+        return Config::enum('translatable.fallback', FallbackMode::class, FallbackMode::Any);
     }
 
     /**
-     * The global fallback locale. Unset or blank means "no fallback locale" (documented);
-     * anything else must be a well-formed locale key, or it throws instead of being cast and
-     * then silently never matching.
+     * The global fallback locale. Null or blank (`''`, whitespace — a host's `KEY=`) is not
+     * set, and not set means "no fallback locale" (documented), returned as `''`; anything
+     * else must be a well-formed locale key, or it throws instead of being cast and then
+     * silently never matching.
      */
     public function fallbackLocale(): string
     {
         $locale = config('translatable.fallback_locale', 'en') ?? '';
 
-        if (! is_string($locale) || ($locale !== '' && ! LocaleGuard::isValid($locale))) {
+        if (is_string($locale) && trim($locale) === '') {
+            return '';
+        }
+
+        if (! is_string($locale) || ! LocaleGuard::isValid($locale)) {
             throw new InvalidConfigurationException(sprintf(
-                'Configuration value [translatable.fallback_locale] must be a locale key such as `en` (or empty for none), [%s] given.',
+                'Configuration value [translatable.fallback_locale] must be a locale key such as `en` (or not set for none), [%s] given.',
                 is_scalar($locale) ? var_export($locale, true) : get_debug_type($locale),
             ));
         }

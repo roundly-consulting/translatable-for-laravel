@@ -41,8 +41,8 @@ it('refuses a non-string or malformed fallback locale (strict config)', function
         ->toThrow(InvalidConfigurationException::class, 'translatable.fallback_locale');
 })->with(['an array' => [['en']], 'an int' => 1, 'a typo' => 'English', 'injection' => "en'; --"]);
 
-it('keeps blank and unset as the documented "no fallback locale" (strict config)', function (mixed $locale): void {
+it('reads blank as not set, keeping the documented "no fallback locale" (strict config)', function (mixed $locale): void {
     config()->set('translatable.fallback_locale', $locale);
 
     expect(app(TranslationManager::class)->fallbackLocale())->toBe('');
-})->with(['unset' => null, 'blank' => '']);
+})->with(['unset' => null, 'blank' => '', 'whitespace' => '  ']);

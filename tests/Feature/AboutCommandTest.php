@@ -67,4 +67,5 @@ it('reports whether the fallback locale is the app default, overridden or unset'
     'an override' => ['sk', 'SET'],
     'unset' => [null, 'NONE'],
     'blank' => ['', 'NONE'],
+    'whitespace' => ['  ', 'NONE'],
 ]);

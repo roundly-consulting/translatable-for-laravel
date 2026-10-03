@@ -216,6 +216,12 @@ it('coerces a string fallback mode from config', function (): void {
     expect(fn () => $topic->translationFallbackMode())->toThrow(InvalidConfigurationException::class, 'translatable.fallback');
 });
 
+it('reads a blank fallback mode as not set, taking the Any default', function (?string $unset): void {
+    config()->set('translatable.fallback', $unset);
+
+    expect((new Topic)->translationFallbackMode())->toBe(FallbackMode::Any);
+})->with(['absent' => null, 'empty' => '', 'whitespace' => '  ']);
+
 it('throws for a non-translatable attribute', function (): void {
     $topic = new Topic;
 
