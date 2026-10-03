@@ -6,6 +6,7 @@ use RoundlyConsulting\Translatable\Enums\FallbackMode;
 
 return [
     // Locale used when a requested locale has no value (FallbackMode::Fallback / Any, step 2).
+    // Blank (TRANSLATABLE_FALLBACK_LOCALE=) is not set, which means no fallback locale.
     'fallback_locale' => env('TRANSLATABLE_FALLBACK_LOCALE', config('app.fallback_locale', 'en')),
 
     // How far the fallback chain reaches (R4). None = exact only; Fallback = exact -> fallback
@@ -16,14 +17,15 @@ return [
     // deliberately left untranslated for a locale can still surface in another language — a
     // cross-locale disclosure. If some content is legally/compliance gated per locale, use
     // `Fallback` (or `None`) instead, globally here or per-model via $translatableFallbackMode.
-    // The env value is read as `none`/`fallback`/`any`; anything else throws rather than
-    // silently widening to `Any`.
+    // The env value is read as `none`/`fallback`/`any` (blank is not set, so `any`); anything
+    // else throws rather than silently widening to `Any`.
     'fallback' => env('TRANSLATABLE_FALLBACK', FallbackMode::Any),
 
     // When true, locale keys written to a model must be BOTH well-formed AND in the supported
     // locales list; otherwise a well-formed key of any locale is accepted. Malformed keys
     // (quotes, spaces, markup, SQL) are ALWAYS rejected regardless of this flag.
-    // Env words are read as booleans (on/off, yes/no, true/false, 1/0); anything else throws.
+    // Env words are read as booleans (on/off, yes/no, true/false, 1/0; blank is not set, so
+    // false); anything else throws.
     'strict_locales' => env('TRANSLATABLE_STRICT_LOCALES', false),
 
     // Default supported locales. Hosts SHOULD rebind SupportedLocales to their own source

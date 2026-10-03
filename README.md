@@ -85,9 +85,9 @@ return [
 
 | Key | Type | Default | Env | Purpose |
 |-----|------|---------|-----|---------|
-| `fallback_locale` | `string` | `app.fallback_locale` / `en` | `TRANSLATABLE_FALLBACK_LOCALE` | Locale tried after the exact one. Empty (or unset) = no fallback locale; anything else must be a well-formed locale key (`en`, `pt-BR`) or it throws the toolkit's `InvalidConfigurationException`. |
-| `fallback` | `FallbackMode\|string` | `FallbackMode::Any` | `TRANSLATABLE_FALLBACK` (`none`/`fallback`/`any`) | How far the fallback chain reaches. Any other value throws the toolkit's `InvalidConfigurationException` on the first read. |
-| `strict_locales` | `bool` | `false` | `TRANSLATABLE_STRICT_LOCALES` (`on`/`off`, `yes`/`no`, `true`/`false`, `1`/`0`) | Reject writes for locales outside the supported list. Any other value throws the toolkit's `InvalidConfigurationException` on the first write. |
+| `fallback_locale` | `string` | `app.fallback_locale` / `en` | `TRANSLATABLE_FALLBACK_LOCALE` | Locale tried after the exact one. Not set — `null` or blank (`TRANSLATABLE_FALLBACK_LOCALE=`) — means its default: no fallback locale; anything else must be a well-formed locale key (`en`, `pt-BR`) or it throws the toolkit's `InvalidConfigurationException`. |
+| `fallback` | `FallbackMode\|string` | `FallbackMode::Any` | `TRANSLATABLE_FALLBACK` (`none`/`fallback`/`any`) | How far the fallback chain reaches. A blank value is not set (`any`); any other value throws the toolkit's `InvalidConfigurationException` on the first read. |
+| `strict_locales` | `bool` | `false` | `TRANSLATABLE_STRICT_LOCALES` (`on`/`off`, `yes`/`no`, `true`/`false`, `1`/`0`) | Reject writes for locales outside the supported list. A blank value is not set (`false`); any other value throws the toolkit's `InvalidConfigurationException` on the first write. |
 | `locales` | `list<string>` | `['en', 'sk']` | — | Default supported locales. Must be a list of well-formed locale keys; a non-list or a bad entry throws the toolkit's `InvalidConfigurationException` naming it. |
 
 The package works with **zero** host configuration. Slug options (separator, word cap, reserved
@@ -534,7 +534,7 @@ there is **no data migration** when adopting this package.
 
 The package contributes a `Translatable` section reporting its shape — how many locales are
 configured and where they come from, the fallback mode, whether the fallback locale is the app's
-(`DEFAULT` — equal to `app.fallback_locale`), overridden (`SET`) or empty (`NONE`), and the
+(`DEFAULT` — equal to `app.fallback_locale`), overridden (`SET`) or not set (`NONE`), and the
 strict-locale switch (`ON`/`OFF`):
 
 ```bash
