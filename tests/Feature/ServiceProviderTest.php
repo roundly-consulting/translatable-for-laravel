@@ -132,7 +132,7 @@ it('hands a fallback mode typo to the reader raw, which throws (strict config)',
     expect($config['fallback'])->toBe('fallbak')
         ->and(fn () => Translatable::fallbackMode())->toThrow(
             InvalidConfigurationException::class,
-            'Configuration value [translatable.fallback] must be one of [none, fallback, any].',
+            'Configuration value [translatable.fallback] must be one of [none, fallback, any], [fallbak] given.',
         );
 });
 
