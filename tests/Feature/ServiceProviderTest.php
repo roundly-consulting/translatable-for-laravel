@@ -7,9 +7,12 @@ use Illuminate\Database\Migrations\Migrator;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\ServiceProvider;
+use RoundlyConsulting\PackageToolkit\Exceptions\InvalidConfigurationException;
+use RoundlyConsulting\PackageToolkit\Support\Config;
 use RoundlyConsulting\Translatable\Contracts\SupportedLocales;
 use RoundlyConsulting\Translatable\Enums\FallbackMode;
 use RoundlyConsulting\Translatable\Exceptions\InvalidLocaleException;
+use RoundlyConsulting\Translatable\Facades\Translatable;
 use RoundlyConsulting\Translatable\Support\ConfigSupportedLocales;
 use RoundlyConsulting\Translatable\Tests\Fixtures\Topic;
 
@@ -74,20 +77,32 @@ it('registers the translations under the translatable namespace', function (): v
 });
 
 /**
- * `strict_locales` comes from an env string. A `(bool)` cast reads "off" and "no" as true, and
- * the `about` row compared with `=== true`, so a string value enforced one thing and reported
- * the other. Both now coerce through filter_var.
+ * `strict_locales` comes from an env string. A `(bool)` cast reads "off" and "no" as true, and a
+ * `filter_var` in the config file read a typo such as "disabled" as false. The file now hands
+ * the raw env value over, and every reader parses it strictly through `Config::boolean()`.
+ *
+ * @param  array<string, string>  $env
+ * @return array<string, mixed>
  */
-it('reads the strict_locales env value as a boolean word', function (string $env, bool $expected): void {
-    putenv("TRANSLATABLE_STRICT_LOCALES={$env}");
-
-    try {
-        $config = require __DIR__.'/../../config/translatable.php';
-    } finally {
-        putenv('TRANSLATABLE_STRICT_LOCALES');
+function translatableConfigFromEnv(array $env): array
+{
+    foreach ($env as $name => $value) {
+        putenv("{$name}={$value}");
     }
 
-    expect($config['strict_locales'])->toBe($expected);
+    try {
+        return require __DIR__.'/../../config/translatable.php';
+    } finally {
+        foreach (array_keys($env) as $name) {
+            putenv($name);
+        }
+    }
+}
+
+it('reads the strict_locales env value as a boolean word', function (string $env, bool $expected): void {
+    config()->set('translatable.strict_locales', translatableConfigFromEnv(['TRANSLATABLE_STRICT_LOCALES' => $env])['strict_locales']);
+
+    expect(Config::boolean('translatable.strict_locales'))->toBe($expected);
 })->with([
     ['off', false],
     ['no', false],
@@ -98,6 +113,42 @@ it('reads the strict_locales env value as a boolean word', function (string $env
     ['1', true],
     ['true', true],
 ]);
+
+it('hands a strict_locales typo to the reader raw, which throws (strict config)', function (): void {
+    $config = translatableConfigFromEnv(['TRANSLATABLE_STRICT_LOCALES' => 'disabled']);
+    config()->set('translatable.strict_locales', $config['strict_locales']);
+
+    expect($config['strict_locales'])->toBe('disabled')
+        ->and(fn () => new Topic(['name' => ['de' => 'Investieren']]))->toThrow(
+            InvalidConfigurationException::class,
+            'Configuration value [translatable.strict_locales] must be a boolean (true/false, 1/0, on/off or yes/no), [disabled] given.',
+        );
+});
+
+it('hands a fallback mode typo to the reader raw, which throws (strict config)', function (): void {
+    $config = translatableConfigFromEnv(['TRANSLATABLE_FALLBACK' => 'fallbak']);
+    config()->set('translatable.fallback', $config['fallback']);
+
+    expect($config['fallback'])->toBe('fallbak')
+        ->and(fn () => Translatable::fallbackMode())->toThrow(
+            InvalidConfigurationException::class,
+            'Configuration value [translatable.fallback] must be one of [none, fallback, any].',
+        );
+});
+
+it('reads a fallback mode from the env', function (): void {
+    config()->set('translatable.fallback', translatableConfigFromEnv(['TRANSLATABLE_FALLBACK' => 'none'])['fallback']);
+
+    expect(Translatable::fallbackMode())->toBe(FallbackMode::None);
+});
+
+it('defaults the fallback mode to any when unset', function (): void {
+    expect(translatableConfigFromEnv([])['fallback'])->toBe(FallbackMode::Any);
+
+    config()->set('translatable.fallback', null);
+
+    expect(Translatable::fallbackMode())->toBe(FallbackMode::Any);
+});
 
 it('enforces and reports a string strict_locales value the same way', function (string $configured, bool $strict): void {
     config()->set('translatable.strict_locales', $configured);

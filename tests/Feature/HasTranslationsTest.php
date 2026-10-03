@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\DB;
+use RoundlyConsulting\PackageToolkit\Exceptions\InvalidConfigurationException;
 use RoundlyConsulting\Translatable\Enums\FallbackMode;
 use RoundlyConsulting\Translatable\Exceptions\NotATranslatableAttributeException;
 use RoundlyConsulting\Translatable\Tests\Fixtures\EmptyStatusTopic;
@@ -212,7 +213,7 @@ it('coerces a string fallback mode from config', function (): void {
     expect($topic->translationFallbackMode())->toBe(FallbackMode::Fallback);
 
     config()->set('translatable.fallback', 'bogus');
-    expect($topic->translationFallbackMode())->toBe(FallbackMode::Any);
+    expect(fn () => $topic->translationFallbackMode())->toThrow(InvalidConfigurationException::class, 'translatable.fallback');
 });
 
 it('throws for a non-translatable attribute', function (): void {

@@ -7,6 +7,7 @@ namespace RoundlyConsulting\Translatable\Support;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use RoundlyConsulting\PackageToolkit\Support\Config;
 use RoundlyConsulting\PackageToolkit\Support\LikeEscaper;
 use RoundlyConsulting\PackageToolkit\Support\RawExpression;
 use RoundlyConsulting\Translatable\Contracts\SupportedLocales;
@@ -131,17 +132,16 @@ class TranslationManager
     }
 
     /**
-     * The effective global fallback mode from config.
+     * The effective global fallback mode from config: `Any` when unset, and a throw for a
+     * value that names no mode — a typo must not silently widen the chain to `Any`.
      */
     public function fallbackMode(): FallbackMode
     {
-        $configured = config('translatable.fallback');
-
-        if ($configured instanceof FallbackMode) {
-            return $configured;
+        if (config('translatable.fallback') === null) {
+            return FallbackMode::Any;
         }
 
-        return FallbackMode::tryFrom((string) $configured) ?? FallbackMode::Any;
+        return Config::enum('translatable.fallback', FallbackMode::class);
     }
 
     public function fallbackLocale(): string

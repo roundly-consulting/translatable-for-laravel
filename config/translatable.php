@@ -16,13 +16,15 @@ return [
     // deliberately left untranslated for a locale can still surface in another language — a
     // cross-locale disclosure. If some content is legally/compliance gated per locale, use
     // `Fallback` (or `None`) instead, globally here or per-model via $translatableFallbackMode.
-    'fallback' => FallbackMode::tryFrom((string) env('TRANSLATABLE_FALLBACK', 'any')) ?? FallbackMode::Any,
+    // The env value is read as `none`/`fallback`/`any`; anything else throws rather than
+    // silently widening to `Any`.
+    'fallback' => env('TRANSLATABLE_FALLBACK', FallbackMode::Any),
 
     // When true, locale keys written to a model must be BOTH well-formed AND in the supported
     // locales list; otherwise a well-formed key of any locale is accepted. Malformed keys
     // (quotes, spaces, markup, SQL) are ALWAYS rejected regardless of this flag.
-    // Env words are read as booleans (on/off, yes/no, true/false, 1/0).
-    'strict_locales' => filter_var(env('TRANSLATABLE_STRICT_LOCALES', false), FILTER_VALIDATE_BOOL),
+    // Env words are read as booleans (on/off, yes/no, true/false, 1/0); anything else throws.
+    'strict_locales' => env('TRANSLATABLE_STRICT_LOCALES', false),
 
     // Default supported locales. Hosts SHOULD rebind SupportedLocales to their own source
     // (e.g. Locale::SUPPORTED) so there is one source of truth (R3).

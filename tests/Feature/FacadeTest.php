@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Validator;
+use RoundlyConsulting\PackageToolkit\Exceptions\InvalidConfigurationException;
 use RoundlyConsulting\Translatable\DataTransferObjects\TranslationChanges;
 use RoundlyConsulting\Translatable\DataTransferObjects\TranslationSearch;
 use RoundlyConsulting\Translatable\Enums\FallbackMode;
@@ -77,7 +78,7 @@ it('reads the configured fallback mode and locale', function (): void {
         ->and(Translatable::fallbackLocale())->toBe('sk');
 
     config()->set('translatable.fallback', 'bogus');
-    expect(Translatable::fallbackMode())->toBe(FallbackMode::Any);
+    expect(fn () => Translatable::fallbackMode())->toThrow(InvalidConfigurationException::class, 'translatable.fallback');
 });
 
 it('coerces a FallbackMode instance straight from config', function (): void {

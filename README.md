@@ -70,12 +70,13 @@ return [
     // locale; any = exact -> fallback locale -> first available (content never renders blank).
     // NOTE: `any` can surface a value from another locale when the requested + fallback
     // locales are empty — a cross-locale disclosure. See "Fallback modes" below.
-    'fallback' => FallbackMode::tryFrom((string) env('TRANSLATABLE_FALLBACK', 'any')) ?? FallbackMode::Any,
+    // Anything other than none/fallback/any throws rather than silently widening to `any`.
+    'fallback' => env('TRANSLATABLE_FALLBACK', FallbackMode::Any),
 
     // Reject any locale key not in the supported list on writes (malformed keys are always
     // rejected regardless). Off by default, so any well-formed locale is accepted.
-    // Env words are read as booleans (on/off, yes/no, true/false, 1/0).
-    'strict_locales' => filter_var(env('TRANSLATABLE_STRICT_LOCALES', false), FILTER_VALIDATE_BOOL),
+    // Env words are read as booleans (on/off, yes/no, true/false, 1/0); anything else throws.
+    'strict_locales' => env('TRANSLATABLE_STRICT_LOCALES', false),
 
     // Default supported locales. Hosts SHOULD rebind SupportedLocales to their own source.
     'locales' => ['en', 'sk'],
@@ -85,8 +86,8 @@ return [
 | Key | Type | Default | Env | Purpose |
 |-----|------|---------|-----|---------|
 | `fallback_locale` | `string` | `app.fallback_locale` / `en` | `TRANSLATABLE_FALLBACK_LOCALE` | Locale tried after the exact one. Empty = no fallback locale. |
-| `fallback` | `FallbackMode` | `FallbackMode::Any` | `TRANSLATABLE_FALLBACK` (`none`/`fallback`/`any`) | How far the fallback chain reaches. |
-| `strict_locales` | `bool` | `false` | `TRANSLATABLE_STRICT_LOCALES` (`on`/`off`, `yes`/`no`, `true`/`false`, `1`/`0`) | Reject writes for locales outside the supported list. |
+| `fallback` | `FallbackMode\|string` | `FallbackMode::Any` | `TRANSLATABLE_FALLBACK` (`none`/`fallback`/`any`) | How far the fallback chain reaches. Any other value throws the toolkit's `InvalidConfigurationException` on the first read. |
+| `strict_locales` | `bool` | `false` | `TRANSLATABLE_STRICT_LOCALES` (`on`/`off`, `yes`/`no`, `true`/`false`, `1`/`0`) | Reject writes for locales outside the supported list. Any other value throws the toolkit's `InvalidConfigurationException` on the first write. |
 | `locales` | `list<string>` | `['en', 'sk']` | — | Default supported locales. |
 
 The package works with **zero** host configuration. Slug options (separator, word cap, reserved
