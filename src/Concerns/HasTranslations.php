@@ -13,6 +13,7 @@ use RoundlyConsulting\Translatable\Enums\FallbackMode;
 use RoundlyConsulting\Translatable\Exceptions\InvalidTranslationValueException;
 use RoundlyConsulting\Translatable\Exceptions\NotATranslatableAttributeException;
 use RoundlyConsulting\Translatable\Exceptions\TranslatableException;
+use RoundlyConsulting\Translatable\Exceptions\TranslationsNotLoadedException;
 use RoundlyConsulting\Translatable\Support\LocaleGuard;
 use RoundlyConsulting\Translatable\Support\TranslationManager;
 use RoundlyConsulting\Translatable\Support\TranslationValue;
@@ -484,7 +485,16 @@ trait HasTranslations
      */
     protected function readMap(string $key): array
     {
-        $raw = $this->attributes[$key] ?? null;
+        if (! array_key_exists($key, $this->attributes)) {
+            // A column the model was loaded without. Honour
+            // Model::preventAccessingMissingAttributes() the way `$model->name` does;
+            // otherwise it reads as empty, as it always has.
+            $this->throwMissingAttributeExceptionIfApplicable($key);
+
+            return [];
+        }
+
+        $raw = $this->attributes[$key];
 
         if ($raw === null) {
             return [];
@@ -536,6 +546,7 @@ trait HasTranslations
     protected function writeTranslation(string $key, string $locale, mixed $value): void
     {
         $this->guardLocale($locale);
+        $this->guardLoaded($key);
 
         $map = $this->readMap($key);
 
@@ -546,6 +557,20 @@ trait HasTranslations
         }
 
         $this->writeMap($key, $map);
+    }
+
+    /**
+     * A one-locale write merges into the stored map, so it needs the map. A model loaded
+     * without the column (`select('id')`) has no key for it, and reading that as empty made
+     * the next save() replace every other stored locale. "Loaded" follows Eloquent's own rule
+     * for missing attributes: a model that exists and was not just created. A whole-map
+     * replacement (writeMap()) merges nothing, so it stays allowed.
+     */
+    protected function guardLoaded(string $key): void
+    {
+        if ($this->exists && ! $this->wasRecentlyCreated && ! array_key_exists($key, $this->attributes)) {
+            throw TranslationsNotLoadedException::make(static::class, $key);
+        }
     }
 
     /**

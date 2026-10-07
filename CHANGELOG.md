@@ -6,6 +6,21 @@ All notable changes to `translatable-for-laravel` are documented in this file. T
 
 ## Unreleased
 
+### Changed
+
+- **Behaviour change:** writing one locale — `setTranslation()`, `forgetTranslation()`,
+  `Translatable::apply()`, `$model->name = '…'` or a `name->sk` key in `fill()` / `update()` — on
+  a model loaded without that column (for example `Topic::query()->select('id')->first()`) now
+  throws `TranslationsNotLoadedException`. It used to read the missing column as an empty map, so
+  the next `save()` wrote that one locale over the column and silently erased every other stored
+  locale. Replacing the whole map (`setTranslations()`, `$model->name = [...]`) still works, and
+  so do new and just-created models.
+- With `Model::preventAccessingMissingAttributes()` on, the translation reads
+  (`getTranslation()`, `getTranslations()`, `hasTranslation()`, `missingLocales()`,
+  `isFullyTranslated()` and the other status helpers) on such a model now throw
+  `MissingAttributeException`, as `$model->name` already did. With it off, they still read the
+  column as empty.
+
 ### Fixed
 
 - Locale keys and search fields with a trailing newline (`"en\n"`, `"name\n"`) are now rejected
