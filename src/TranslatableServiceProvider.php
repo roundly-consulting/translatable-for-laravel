@@ -57,18 +57,18 @@ final class TranslatableServiceProvider extends PackageServiceProvider
      * The `php artisan about` payload. Reports shape, never content: the locale list is the
      * host's market footprint, so it renders as a count and the fallback locale as a switch —
      * DEFAULT (follows `app.fallback_locale`), SET (overridden) or NONE (no fallback locale).
-     * Runs no query.
+     * The count comes from the bound `SupportedLocales`, the source named on the next row; the
+     * package runs no query of its own, but a database-backed host source runs its own.
      *
      * @return array<string, string>
      */
     private function aboutSection(): array
     {
-        $locales = config('translatable.locales', []);
         $manager = $this->app->make(TranslationManager::class);
         $fallbackLocale = $manager->fallbackLocale();
 
         return [
-            'Locales' => (is_array($locales) ? count($locales) : 0).' configured',
+            'Locales' => count($manager->supported()).' configured',
             'Locales source' => class_basename($this->app->make(SupportedLocales::class)),
             'Fallback' => $manager->fallbackMode()->value,
             'Fallback locale' => match (true) {

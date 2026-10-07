@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Artisan;
+use RoundlyConsulting\Translatable\Contracts\SupportedLocales;
+use RoundlyConsulting\Translatable\Tests\Fixtures\MarketSupportedLocales;
 
 /**
  * The secret-safe `about` capture (A).
@@ -44,6 +46,20 @@ it('never renders a configured locale', function (): void {
             'SET',
             'ON',
         ],
+    );
+});
+
+/**
+ * The count comes from the bound `SupportedLocales` — the source the section names next to it
+ * and the one the config file tells hosts to rebind — not from `translatable.locales`.
+ */
+it('counts the bound SupportedLocales, not the config list', function (): void {
+    config()->set('translatable.locales', ['en', 'sk']);
+    app()->bind(SupportedLocales::class, MarketSupportedLocales::class);
+
+    expect('translatable')->toLeakNoSecrets(
+        secrets: ['zz-internal-market'],
+        mustRender: ['3 configured', 'MarketSupportedLocales'],
     );
 });
 

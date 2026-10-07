@@ -15,6 +15,9 @@ All notable changes to `translatable-for-laravel` are documented in this file. T
 - `whereLocale()`, `whereHasLocale()`, `whereMissingLocale()` and `Translatable::search()` now
   qualify the column with the model's table (`topics.name->en`), so they work on a query that
   joins another table with a column of the same name instead of failing as ambiguous.
+- The `Locales` row of `php artisan about` now counts the bound `SupportedLocales` source (the
+  class named on the next row) instead of the `translatable.locales` config list, so a host that
+  rebinds the source sees its real locale count.
 
 ## 1.0.1 - 2026-10-04
 
