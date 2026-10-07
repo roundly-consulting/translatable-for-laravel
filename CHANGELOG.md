@@ -18,6 +18,14 @@ All notable changes to `translatable-for-laravel` are documented in this file. T
 - The `Locales` row of `php artisan about` now counts the bound `SupportedLocales` source (the
   class named on the next row) instead of the `translatable.locales` config list, so a host that
   rebinds the source sees its real locale count.
+- A per-model `$translatableFallbackMode` declared as a string (`'none'`, `'fallback'`, `'any'`)
+  is now honoured; it used to be ignored, so `'none'` silently fell back to the global mode
+  (`Any` by default) and could show another locale's content. A value that names no mode now
+  throws `InvalidConfigurationException`, like the `translatable.fallback` setting does.
+- A typed `$translatableFallbackMode` / `$translatableFallbackLocale` declared without a default
+  now means "use the config" instead of throwing an uninitialised-property `Error` on every read.
+- A per-model `$translatableFallbackLocale` is now validated like the config setting: a malformed
+  key throws `InvalidLocaleException` (blank still means no fallback locale).
 
 ## 1.0.1 - 2026-10-04
 

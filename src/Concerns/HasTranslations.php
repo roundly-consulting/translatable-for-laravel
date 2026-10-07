@@ -7,6 +7,7 @@ namespace RoundlyConsulting\Translatable\Concerns;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use JsonException;
+use RoundlyConsulting\PackageToolkit\Exceptions\InvalidConfigurationException;
 use RoundlyConsulting\PackageToolkit\Support\Config;
 use RoundlyConsulting\Translatable\Enums\FallbackMode;
 use RoundlyConsulting\Translatable\Exceptions\InvalidTranslationValueException;
@@ -22,8 +23,10 @@ use stdClass;
  * The trait owns JSON serialization for its listed attributes — models add no cast.
  *
  * A model lists translatable attributes in a `public array $translatable` property and may
- * declare `protected ?FallbackMode $translatableFallbackMode` /
- * `protected ?string $translatableFallbackLocale` to override the config defaults.
+ * declare `protected ?FallbackMode $translatableFallbackMode = null` /
+ * `protected ?string $translatableFallbackLocale = null` to override the config defaults. The
+ * mode also accepts its backing string (`protected $translatableFallbackMode = 'none';`);
+ * `null` or an uninitialised property means "use the config".
  *
  * Everything that is not per-model state — the supported locales, the current locale, the
  * configured fallback settings, locale-key validation and map resolution — goes through the
@@ -396,22 +399,68 @@ trait HasTranslations
         return array_values($this->translatable);
     }
 
+    /**
+     * The model's `$translatableFallbackMode` — a `FallbackMode` or its backing string
+     * (`'none'`, `'fallback'`, `'any'`) — or, when it is not declared, `null` or never
+     * initialised, the configured mode. Any other value throws: a typo must not silently widen
+     * the chain to the global mode, the way the config setting refuses one too.
+     */
     public function translationFallbackMode(): FallbackMode
     {
-        if (property_exists($this, 'translatableFallbackMode') && $this->translatableFallbackMode instanceof FallbackMode) {
-            return $this->translatableFallbackMode;
+        // property_exists() first: isset() on an undeclared property reaches Eloquent's
+        // __isset(), which reads it as an attribute. isset() is false for an uninitialised
+        // typed property, where a plain read is an Error.
+        if (! property_exists($this, 'translatableFallbackMode') || ! isset($this->translatableFallbackMode)) {
+            return $this->translationManager()->fallbackMode();
         }
 
-        return $this->translationManager()->fallbackMode();
+        return $this->fallbackModeOverride($this->translatableFallbackMode);
     }
 
+    /**
+     * The model's `$translatableFallbackLocale` — or, when it is not declared, `null` or never
+     * initialised, the configured one. Blank means "no fallback locale", as in config; any other
+     * string must be a well-formed locale key (`InvalidLocaleException`), and a non-string
+     * throws `InvalidConfigurationException`.
+     */
     public function translationFallbackLocale(): string
     {
-        if (property_exists($this, 'translatableFallbackLocale') && is_string($this->translatableFallbackLocale)) {
-            return $this->translatableFallbackLocale;
+        if (! property_exists($this, 'translatableFallbackLocale') || ! isset($this->translatableFallbackLocale)) {
+            return $this->translationManager()->fallbackLocale();
         }
 
-        return $this->translationManager()->fallbackLocale();
+        return $this->fallbackLocaleOverride($this->translatableFallbackLocale);
+    }
+
+    /**
+     * The host declares the override with any type (an enum-typed, a string-typed or an untyped
+     * property), so the value is validated as `mixed`.
+     */
+    private function fallbackModeOverride(mixed $mode): FallbackMode
+    {
+        if ($mode instanceof FallbackMode) {
+            return $mode;
+        }
+
+        return (is_string($mode) ? FallbackMode::tryFrom($mode) : null)
+            ?? throw InvalidConfigurationException::notAValidEnum(
+                static::class.'::$translatableFallbackMode',
+                FallbackMode::class,
+                $mode,
+            );
+    }
+
+    private function fallbackLocaleOverride(mixed $locale): string
+    {
+        if (! is_string($locale)) {
+            throw new InvalidConfigurationException(sprintf(
+                'Configuration value [%s::$translatableFallbackLocale] must be a locale key such as `en` (or null for the configured one), [%s] given.',
+                static::class,
+                is_scalar($locale) ? var_export($locale, true) : get_debug_type($locale),
+            ));
+        }
+
+        return trim($locale) === '' ? '' : LocaleGuard::ensure($locale);
     }
 
     protected function currentLocale(): string

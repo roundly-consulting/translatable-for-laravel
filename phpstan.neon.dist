@@ -11,6 +11,8 @@ parameters:
         - tests/Fixtures/StrictTopic.php
         - tests/Fixtures/EventfulTopic.php
         - tests/Fixtures/SluggedTopic.php
+        - tests/Fixtures/LooseFallbackTopic.php
+        - tests/Fixtures/UninitialisedFallbackTopic.php
     # This package ships its own config/ dir; env() is correct there.
     configDirectories:
         - config
