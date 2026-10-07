@@ -6,6 +6,13 @@ All notable changes to `translatable-for-laravel` are documented in this file. T
 
 ## Unreleased
 
+### Fixed
+
+- Locale keys and search fields with a trailing newline (`"en\n"`, `"name\n"`) are now rejected
+  like any other malformed key. They used to pass the format check, so a write stored a junk
+  locale key, the scopes ran with it, and `Translatable::search()` reached the database and
+  failed there instead of throwing `TranslatableException`.
+
 ## 1.0.1 - 2026-10-04
 
 ### Changed

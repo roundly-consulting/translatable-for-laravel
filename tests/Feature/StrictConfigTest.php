@@ -21,6 +21,7 @@ it('refuses a locales value that is not a list of well-formed locales (strict co
     'an int entry' => [['en', 1]],
     'a blank entry' => [['en', '']],
     'a malformed entry' => [['en', 'English']],
+    'an entry with a trailing newline' => [['en', "sk\n"]],
 ]);
 
 it('reads a valid locales list, an empty one and an unset one (strict config)', function (): void {
@@ -39,7 +40,7 @@ it('refuses a non-string or malformed fallback locale (strict config)', function
 
     expect(fn () => app(TranslationManager::class)->fallbackLocale())
         ->toThrow(InvalidConfigurationException::class, 'translatable.fallback_locale');
-})->with(['an array' => [['en']], 'an int' => 1, 'a typo' => 'English', 'injection' => "en'; --"]);
+})->with(['an array' => [['en']], 'an int' => 1, 'a typo' => 'English', 'injection' => "en'; --", 'a trailing newline' => "en\n"]);
 
 it('reads blank as not set, keeping the documented "no fallback locale" (strict config)', function (mixed $locale): void {
     config()->set('translatable.fallback_locale', $locale);

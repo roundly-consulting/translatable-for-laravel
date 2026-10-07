@@ -38,6 +38,15 @@ it('rejects a malformed locale key on setTranslation', function (): void {
         ->toThrow(InvalidLocaleException::class);
 });
 
+it('rejects a locale key with a trailing newline on every write path', function (): void {
+    $topic = new Topic;
+
+    expect(fn () => $topic->setTranslation('name', "en\n", 'x'))->toThrow(InvalidLocaleException::class)
+        ->and(fn () => $topic->setTranslations('name', ["en\n" => 'x']))->toThrow(InvalidLocaleException::class)
+        ->and(fn () => new Topic(['name' => ["sk\n" => 'x']]))->toThrow(InvalidLocaleException::class)
+        ->and($topic->getTranslations('name'))->toBe([]);
+});
+
 it('does not grow the map with thousands of junk locale keys', function (): void {
     $junk = [];
     for ($i = 0; $i < 2000; $i++) {

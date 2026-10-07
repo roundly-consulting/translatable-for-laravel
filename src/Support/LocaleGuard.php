@@ -19,15 +19,16 @@ final class LocaleGuard
     /**
      * A BCP-47-like locale key: a 2–3 letter primary subtag plus optional `_`/`-` subtags.
      * Matches `en`, `sk`, `en_US`, `pt-BR`, `zh_Hans_CN`; rejects anything with quotes,
-     * spaces, SQL, or markup.
+     * spaces, SQL, or markup. `D` makes `$` the true end: without it a trailing newline
+     * (`"en\n"`) passed.
      */
-    public const FORMAT = '/^[a-z]{2,3}(?:[_-][A-Za-z0-9]{2,8})*$/';
+    public const FORMAT = '/^[a-z]{2,3}(?:[_-][A-Za-z0-9]{2,8})*$/D';
 
     /**
      * A bare SQL identifier (table/column/index name): letters, digits and underscores only,
-     * not starting with a digit.
+     * not starting with a digit. `D` rejects a trailing newline, as in FORMAT.
      */
-    public const IDENTIFIER = '/^[A-Za-z_][A-Za-z0-9_]*$/';
+    public const IDENTIFIER = '/^[A-Za-z_][A-Za-z0-9_]*$/D';
 
     public static function isValid(string $locale): bool
     {

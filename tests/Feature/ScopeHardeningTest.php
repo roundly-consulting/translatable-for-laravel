@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\DB;
 use RoundlyConsulting\Translatable\DataTransferObjects\TranslationSearch;
 use RoundlyConsulting\Translatable\Exceptions\InvalidLocaleException;
 use RoundlyConsulting\Translatable\Exceptions\NotATranslatableAttributeException;
+use RoundlyConsulting\Translatable\Exceptions\TranslatableException;
 use RoundlyConsulting\Translatable\Facades\Translatable;
 use RoundlyConsulting\Translatable\Tests\Fixtures\Topic;
 
@@ -30,6 +32,22 @@ it('guards whereHasLocale and whereMissingLocale', function (): void {
 
     expect(fn () => Topic::query()->whereMissingLocale('secret'))
         ->toThrow(NotATranslatableAttributeException::class);
+});
+
+it('rejects a locale with a trailing newline in every scope', function (): void {
+    expect(fn () => Topic::query()->whereLocale('name', 'x', "en\n"))->toThrow(InvalidLocaleException::class)
+        ->and(fn () => Topic::query()->whereHasLocale('name', "en\n"))->toThrow(InvalidLocaleException::class)
+        ->and(fn () => Topic::query()->whereMissingLocale('name', "en\n"))->toThrow(InvalidLocaleException::class);
+});
+
+it('rejects a search field with a trailing newline before any SQL runs', function (): void {
+    DB::enableQueryLog();
+
+    expect(fn () => Translatable::search(
+        Topic::query(),
+        new TranslationSearch(fields: ["name\n"], term: 'x'),
+    ))->toThrow(TranslatableException::class)
+        ->and(DB::getQueryLog())->toBe([]);
 });
 
 // F9 — LIKE wildcards in the search term are escaped (value stays bound).
