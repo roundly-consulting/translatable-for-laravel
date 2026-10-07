@@ -41,6 +41,8 @@ All notable changes to `translatable-for-laravel` are documented in this file. T
   now means "use the config" instead of throwing an uninitialised-property `Error` on every read.
 - A per-model `$translatableFallbackLocale` is now validated like the config setting: a malformed
   key throws `InvalidLocaleException` (blank still means no fallback locale).
+- The README's example model now declares `protected $fillable = ['name'];`, so its
+  `Topic::create(['name' => …])` runs instead of throwing `MassAssignmentException`.
 
 ## 1.0.1 - 2026-10-04
 

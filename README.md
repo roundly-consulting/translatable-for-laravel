@@ -52,6 +52,8 @@ final class Topic extends Model implements Translatable
 {
     use HasTranslations;
 
+    protected $fillable = ['name'];
+
     /** @var list<string> */
     public array $translatable = ['name'];
 }
