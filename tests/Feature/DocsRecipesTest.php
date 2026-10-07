@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use RoundlyConsulting\Translatable\DataTransferObjects\TranslationChanges;
 use RoundlyConsulting\Translatable\Facades\Translatable;
 use RoundlyConsulting\Translatable\Tests\Fixtures\Topic;
@@ -59,3 +60,22 @@ it('merges a partial update, so untouched locales are kept', function (mixed $in
     'one locale of the map' => [['en' => 'Saving'], ['en' => 'Saving', 'sk' => 'Investovanie']],
     'a blank locale (a merge never clears one)' => [['sk' => ''], ['en' => 'Investing', 'sk' => 'Investovanie']],
 ]);
+
+it('applies a partial update under a row lock', function (): void {
+    $id = $this->topic->id;
+    $request = Request::create('/topics/1', 'PATCH', ['name' => ['en' => 'Saving']]);
+
+    // docs: row lock
+    DB::transaction(function () use ($id, $request): void {
+        $topic = Topic::query()->lockForUpdate()->findOrFail($id);   // re-read under a row lock
+
+        Translatable::apply($topic, TranslationChanges::make([
+            'name' => Translatable::fromInput($request->input('name')),
+        ]));
+
+        $topic->save();
+    });
+    // end docs
+
+    expect(recipeName($this->topic))->toBe(['en' => 'Saving', 'sk' => 'Investovanie']);
+});

@@ -23,6 +23,10 @@ All notable changes to `translatable-for-laravel` are documented in this file. T
 - Documentation: the README's `fromInput()` line now says what it does — it replaces the whole
   locale map with the form's locales, which is how a full form clears a locale. The docs add a
   partial-update recipe (`Translatable::apply()`) that keeps the locales a request leaves out.
+- Documentation: `Translatable::apply()` and `TranslationChanges` are no longer described as a
+  per-locale PATCH. They merge in memory, and `save()` writes the whole column, so two requests
+  saving different locales of the same row are last-write-wins; the docs add a transaction +
+  `lockForUpdate()` recipe for concurrent editors.
 
 ### Fixed
 

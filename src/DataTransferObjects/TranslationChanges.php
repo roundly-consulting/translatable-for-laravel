@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Translatable\DataTransferObjects;
 
 /**
- * A PATCH-style set of translation changes: field => locale => value.
- * Only the supplied locales are touched; untouched locales are preserved.
+ * A set of translation changes for `Translatable::apply()`: field => locale => value.
+ * apply() merges them into the model in memory — the supplied locales are set, the model's
+ * other locales are kept — and the model's `save()` writes the whole column (last write wins).
  */
 final readonly class TranslationChanges
 {

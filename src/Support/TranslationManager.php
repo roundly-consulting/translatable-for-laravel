@@ -211,7 +211,11 @@ class TranslationManager
     }
 
     /**
-     * PATCH-merge a set of changes onto a model: only supplied locales are touched.
+     * Merge a set of changes into a model in memory: each supplied locale is set (`null` or ''
+     * removes it) and the model's other locales are kept. Nothing is persisted here — `save()`
+     * then writes the whole column, so two requests that loaded the same row and save different
+     * locales are last-write-wins. Serialise concurrent editors with a row lock: re-read the
+     * model with `lockForUpdate()` inside a transaction, apply, then save.
      */
     public function apply(Translatable $model, TranslationChanges $changes): void
     {
