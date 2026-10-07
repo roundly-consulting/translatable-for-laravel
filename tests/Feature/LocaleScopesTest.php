@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use RoundlyConsulting\Translatable\Tests\Fixtures\Topic;
 
 beforeEach(function (): void {
@@ -51,4 +53,26 @@ it('defaults the locale of the has/missing scopes to the app locale', function (
 
     expect(Topic::query()->whereHasLocale('name')->count())->toBe(0)
         ->and(Topic::query()->whereMissingLocale('name')->count())->toBe(1);
+});
+
+it('qualifies the column, so the scopes work on a join with another name column', function (): void {
+    $investing = Topic::query()->create(['name' => ['en' => 'Investing', 'sk' => 'Investovanie']]);
+    $cooking = Topic::query()->create(['name' => ['en' => 'Cooking']]);
+    $this->createTopicTagsTable();
+    DB::table('topic_tags')->insert([
+        ['topic_id' => $investing->id, 'name' => 'finance'],
+        ['topic_id' => $cooking->id, 'name' => 'food'],
+    ]);
+
+    /** @return list<int> */
+    $ids = static fn (Builder $query): array => $query
+        ->join('topic_tags', 'topic_tags.topic_id', '=', 'topics.id')
+        ->orderBy('topics.id')
+        ->pluck('topics.id')
+        ->map(static fn (mixed $id): int => (int) $id)
+        ->all();
+
+    expect($ids(Topic::query()->whereLocale('name', 'Investovanie', 'sk')))->toBe([$investing->id])
+        ->and($ids(Topic::query()->whereHasLocale('name', 'sk')))->toBe([$investing->id])
+        ->and($ids(Topic::query()->whereMissingLocale('name', 'sk')))->toBe([$cooking->id]);
 });

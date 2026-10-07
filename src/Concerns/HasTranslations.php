@@ -296,7 +296,7 @@ trait HasTranslations
     {
         $locale = $this->guardScope($field, $locale);
 
-        return $query->where("{$field}->{$locale}", $value);
+        return $query->where($query->qualifyColumn($field)."->{$locale}", $value);
     }
 
     /**
@@ -308,10 +308,11 @@ trait HasTranslations
     public function scopeWhereHasLocale(Builder $query, string $field, ?string $locale = null): Builder
     {
         $locale = $this->guardScope($field, $locale);
+        $column = $query->qualifyColumn($field)."->{$locale}";
 
-        return $query->where(function (Builder $inner) use ($field, $locale): void {
-            $inner->whereNotNull("{$field}->{$locale}")
-                ->where("{$field}->{$locale}", '!=', '');
+        return $query->where(function (Builder $inner) use ($column): void {
+            $inner->whereNotNull($column)
+                ->where($column, '!=', '');
         });
     }
 
@@ -324,10 +325,11 @@ trait HasTranslations
     public function scopeWhereMissingLocale(Builder $query, string $field, ?string $locale = null): Builder
     {
         $locale = $this->guardScope($field, $locale);
+        $column = $query->qualifyColumn($field)."->{$locale}";
 
-        return $query->where(function (Builder $inner) use ($field, $locale): void {
-            $inner->whereNull("{$field}->{$locale}")
-                ->orWhere("{$field}->{$locale}", '');
+        return $query->where(function (Builder $inner) use ($column): void {
+            $inner->whereNull($column)
+                ->orWhere($column, '');
         });
     }
 
@@ -568,7 +570,9 @@ trait HasTranslations
     /**
      * Validate a scope's field (must be translatable) and locale (must be well-formed),
      * returning the effective locale. Keeps request-supplied `?locale=` values from ever
-     * reaching a `{$field}->{$locale}` JSON-path column expression unchecked.
+     * reaching a `{$field}->{$locale}` JSON-path column expression unchecked. The scopes then
+     * qualify the field with the model's table, so a join onto another `name` column is not
+     * ambiguous.
      */
     protected function guardScope(string $field, ?string $locale): string
     {

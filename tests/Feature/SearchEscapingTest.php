@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use RoundlyConsulting\Translatable\DataTransferObjects\TranslationSearch;
 use RoundlyConsulting\Translatable\Exceptions\TranslatableException;
@@ -96,4 +97,21 @@ it('still validates the field names when no locale is supported', function (): v
         Topic::query(),
         new TranslationSearch(fields: ['name; drop table topics'], term: 'x'),
     ))->toThrow(TranslatableException::class);
+});
+
+it('qualifies the column, so a search works on a join with another name column', function (): void {
+    $this->createTopicTagsTable();
+    DB::table('topic_tags')->insert(Topic::query()->pluck('id')->map(static fn (mixed $id): array => [
+        'topic_id' => $id,
+        'name' => 'cotton tag',
+    ])->all());
+
+    $query = Topic::query()->select('topics.*')->join('topic_tags', 'topic_tags.topic_id', '=', 'topics.id');
+
+    expect(Translatable::search($query, new TranslationSearch(fields: ['name'], term: 'cotton'))
+        ->get()
+        ->map(static fn (Topic $topic): string => (string) $topic->getTranslation('name', 'en'))
+        ->sort()
+        ->values()
+        ->all())->toBe(['100 percent cotton shirt', '100% cotton shirt']);
 });

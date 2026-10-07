@@ -12,6 +12,9 @@ All notable changes to `translatable-for-laravel` are documented in this file. T
   like any other malformed key. They used to pass the format check, so a write stored a junk
   locale key, the scopes ran with it, and `Translatable::search()` reached the database and
   failed there instead of throwing `TranslatableException`.
+- `whereLocale()`, `whereHasLocale()`, `whereMissingLocale()` and `Translatable::search()` now
+  qualify the column with the model's table (`topics.name->en`), so they work on a query that
+  joins another table with a column of the same name instead of failing as ambiguous.
 
 ## 1.0.1 - 2026-10-04
 

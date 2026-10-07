@@ -242,18 +242,21 @@ class TranslationManager
             return $query->whereRaw('1 = 0');
         }
 
-        $isPgsql = ConnectionDriver::isPgsql($query->getModel()->getConnection());
+        $model = $query->getModel();
+        $isPgsql = ConnectionDriver::isPgsql($model->getConnection());
         // Escape LIKE wildcards so a term like "100%" scopes the (bound) match instead of
         // matching everything; the value stays bound, this only neutralises %/_/\ meaning.
         $term = '%'.LikeEscaper::escape($search->term).'%';
         $grammar = $query->getQuery()->getGrammar();
 
-        return $query->where(static function (Builder $inner) use ($search, $isPgsql, $term, $locales, $grammar): void {
+        return $query->where(static function (Builder $inner) use ($search, $isPgsql, $term, $locales, $grammar, $model): void {
             foreach ($search->fields as $field) {
                 foreach ($locales as $locale) {
                     // Only the grammar-wrapped, allowlisted identifier reaches the SQL; the
-                    // needle and the escape character are bound.
-                    $column = $grammar->wrap("{$field}->".LocaleGuard::ensure($locale));
+                    // needle and the escape character are bound. The field is checked bare
+                    // above and qualified here, so a join onto another table with the same
+                    // column name is not ambiguous.
+                    $column = $grammar->wrap($model->qualifyColumn($field).'->'.LocaleGuard::ensure($locale));
 
                     // Two driver-specific requirements, both of which are invisible on the
                     // engine that does not need them:

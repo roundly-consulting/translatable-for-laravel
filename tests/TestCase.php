@@ -54,4 +54,19 @@ abstract class TestCase extends PackageTestCase
             $table->softDeletes();
         });
     }
+
+    /**
+     * A second table with its own `name` column, joined onto `topics` to prove the scopes and
+     * `search()` qualify their column — an unqualified `name` is ambiguous on every engine.
+     */
+    protected function createTopicTagsTable(): void
+    {
+        Schema::dropIfExists('topic_tags');
+
+        Schema::create('topic_tags', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('topic_id');
+            $table->string('name');
+        });
+    }
 }
