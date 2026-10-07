@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use RoundlyConsulting\Translatable\Facades\Translatable;
 use RoundlyConsulting\Translatable\Tests\Fixtures\ReadmeTopic;
@@ -35,4 +36,9 @@ it('runs the README usage example', function (): void {
         ->and($topic->getTranslations('name'))->toBe(['en' => 'Investing', 'sk' => 'Investovanie']);
 
     expect(Translatable::usingLocale('en', fn (): string => $topic->name))->toBe('Investing');
+
+    // The form posts every locale; the cleared `sk` field drops out of the replaced map.
+    $request = Request::create('/topics/1', 'PUT', ['name' => ['en' => 'Investing', 'sk' => '']]);
+    $topic->setTranslations('name', Translatable::fromInput($request->input('name')));
+    expect($topic->getTranslations('name'))->toBe(['en' => 'Investing']);
 });

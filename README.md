@@ -79,7 +79,7 @@ The facade handles everything that isn't per-model state:
 use RoundlyConsulting\Translatable\Facades\Translatable;
 
 Translatable::usingLocale('en', fn (): string => $topic->name);                     // 'Investing'
-$topic->setTranslations('name', Translatable::fromInput($request->input('name')));  // clean admin input
+$topic->setTranslations('name', Translatable::fromInput($request->input('name')));  // replaces the map with the form's locales
 ```
 
 <!-- roundly-docs:start -->

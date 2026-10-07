@@ -20,6 +20,9 @@ All notable changes to `translatable-for-laravel` are documented in this file. T
   `isFullyTranslated()` and the other status helpers) on such a model now throw
   `MissingAttributeException`, as `$model->name` already did. With it off, they still read the
   column as empty.
+- Documentation: the README's `fromInput()` line now says what it does — it replaces the whole
+  locale map with the form's locales, which is how a full form clears a locale. The docs add a
+  partial-update recipe (`Translatable::apply()`) that keeps the locales a request leaves out.
 
 ### Fixed
 
