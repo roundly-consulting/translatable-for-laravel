@@ -6,6 +6,8 @@ All notable changes to `translatable-for-laravel` are documented in this file. T
 
 ## Unreleased
 
+## 1.1.0 - 2026-10-07
+
 ### Changed
 
 - **Behaviour change:** writing one locale — `setTranslation()`, `forgetTranslation()`,
@@ -20,6 +22,10 @@ All notable changes to `translatable-for-laravel` are documented in this file. T
   `isFullyTranslated()` and the other status helpers) on such a model now throw
   `MissingAttributeException`, as `$model->name` already did. With it off, they still read the
   column as empty.
+- Documentation: the README hero image uses an absolute URL, so it renders on Packagist and other
+  sites.
+- Documentation: the README's example model now declares `protected $fillable = ['name'];`, so its
+  `Topic::create(['name' => …])` runs instead of throwing `MassAssignmentException`.
 - Documentation: the README's `fromInput()` line now says what it does — it replaces the whole
   locale map with the form's locales, which is how a full form clears a locale. The docs add a
   partial-update recipe (`Translatable::apply()`) that keeps the locales a request leaves out.
@@ -51,8 +57,6 @@ All notable changes to `translatable-for-laravel` are documented in this file. T
   now means "use the config" instead of throwing an uninitialised-property `Error` on every read.
 - A per-model `$translatableFallbackLocale` is now validated like the config setting: a malformed
   key throws `InvalidLocaleException` (blank still means no fallback locale).
-- The README's example model now declares `protected $fillable = ['name'];`, so its
-  `Topic::create(['name' => …])` runs instead of throwing `MassAssignmentException`.
 
 ## 1.0.1 - 2026-10-04
 
