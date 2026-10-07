@@ -124,6 +124,27 @@ it('searches case-insensitively on the configured engine', function (): void {
 });
 
 /**
+ * Case-insensitivity beyond ASCII — the package's own default `sk` locale. PostgreSQL's `ilike`
+ * and MySQL's `lower()` fold `Č`/`Á`; SQLite's built-in `lower()` has no ICU and folds ASCII
+ * only, so `čaj` does not find `Čaj` there. SQLite is a test database (the supported engines
+ * are PostgreSQL and MySQL), and the docs state the limitation.
+ */
+it('matches Slovak diacritics case-insensitively on the configured engine', function (): void {
+    Topic::query()->create(['name' => ['sk' => 'Čaj a káva']]);
+    Topic::query()->create(['name' => ['sk' => 'Pivo']]);
+
+    $count = static fn (string $term): int => Translatable::search(
+        Topic::query(),
+        new TranslationSearch(fields: ['name'], term: $term),
+    )->count();
+
+    expect($count('čaj'))->toBe(1)
+        ->and($count('ČAJ'))->toBe(1)
+        ->and($count('KÁVA'))->toBe(1)
+        ->and($count('káva'))->toBe(1);
+})->skip(fn (): bool => DriverMatrix::driver() === 'sqlite', "SQLite's lower() folds ASCII only (documented; SQLite is a test database).");
+
+/**
  * `jsonb()` is a Blueprint macro this package ships. Postgres maps it to a real `jsonb`
  * column; every other driver gets `json`. Asserting the column is USABLE (a translated write
  * and read back) on whatever engine the leg configured is what proves the macro resolved to
