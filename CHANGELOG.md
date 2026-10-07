@@ -27,6 +27,9 @@ All notable changes to `translatable-for-laravel` are documented in this file. T
   per-locale PATCH. They merge in memory, and `save()` writes the whole column, so two requests
   saving different locales of the same row are last-write-wins; the docs add a transaction +
   `lockForUpdate()` recipe for concurrent editors.
+- Documentation: the README states the supported databases — PostgreSQL 12+ and MySQL 8.0.23+
+  (SQLite for tests) — instead of "any Laravel-supported database". On SQLite, case-insensitive
+  `Translatable::search()` folds ASCII letters only.
 
 ### Fixed
 

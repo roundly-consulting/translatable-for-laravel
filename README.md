@@ -25,7 +25,8 @@ content never renders blank, and per-locale slugs come built in.
 
 ## Installation
 
-Requires PHP 8.4, Laravel 12 or 13, and any Laravel-supported database.
+Requires PHP 8.4 and Laravel 12 or 13. Supported databases: PostgreSQL 12+ and MySQL 8.0.23+
+(SQLite for tests). SQL Server is not supported.
 
 ```bash
 composer require roundly-consulting/translatable-for-laravel
