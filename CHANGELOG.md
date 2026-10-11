@@ -6,6 +6,11 @@ All notable changes to `translatable-for-laravel` are documented in this file. T
 
 ## Unreleased
 
+### Changed
+
+- Maintenance: requires the latest roundly packages — package-toolkit `^1.3.0`, enums `^1.1.0`,
+  sluggable `^1.1.1`; dev: testing `^1.2.1`.
+
 ## 1.1.0 - 2026-10-07
 
 ### Changed
