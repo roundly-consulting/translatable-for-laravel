@@ -11,10 +11,12 @@ All notable changes to `translatable-for-laravel` are documented in this file. T
 ### Fixed
 
 - Larastan / PHPStan now knows the `$table->translatable(string $name): ColumnDefinition` schema
-  macro. A macro only exists once the provider boots, which static analysis never does, so a
-  migration calling it failed with "Call to an undefined method". The package ships a PHPStan
-  extension that `phpstan/extension-installer` loads automatically (`extra.phpstan.includes`);
-  without the installer, include `vendor/roundly-consulting/translatable-for-laravel/extension.neon`.
+  macro. A macro only exists once its provider boots. Larastan boots an auto-discovering host app
+  and usually finds it, but not where the provider isn't booted during analysis (package development
+  under Testbench, `dont-discover`, a provider registered by hand) — there a migration calling it
+  failed with "Call to an undefined method". The package ships a PHPStan extension that
+  `phpstan/extension-installer` loads automatically (`extra.phpstan.includes`); without the
+  installer, include `vendor/roundly-consulting/translatable-for-laravel/extension.neon`.
 
 ## 1.1.1 - 2026-10-11
 
