@@ -6,6 +6,8 @@ All notable changes to `translatable-for-laravel` are documented in this file. T
 
 ## Unreleased
 
+## 1.1.2 - 2026-10-17
+
 ### Fixed
 
 - Larastan / PHPStan now knows the `$table->translatable(string $name): ColumnDefinition` schema
