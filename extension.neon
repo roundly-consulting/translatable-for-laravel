@@ -1,0 +1,5 @@
+services:
+    -
+        class: RoundlyConsulting\Translatable\PHPStan\TranslatableMacrosExtension
+        tags:
+            - phpstan.broker.methodsClassReflectionExtension

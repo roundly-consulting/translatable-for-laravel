@@ -1,0 +1,108 @@
+<?php
+
+declare(strict_types=1);
+
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\Schema\ColumnDefinition;
+use PHPStan\Reflection\ParameterReflection;
+use PHPStan\Reflection\PassedByReference;
+use PHPStan\Testing\PHPStanTestCase;
+use PHPStan\TrinaryLogic;
+use PHPStan\Type\VerbosityLevel;
+use RoundlyConsulting\Translatable\PHPStan\TranslatableMacrosExtension;
+
+/**
+ * A macro only exists once the provider has booted, which a static analyser never does. These
+ * cases pin the reflection extension that declares it anyway — against the macro the provider
+ * really registers and against the composer wiring consumers auto-load it through. The fixture
+ * migration in tests/PHPStan is analysed by `composer analyse` on top.
+ */
+$root = dirname(__DIR__, 3);
+
+/** The signature PHPStan sees: "name: type" per parameter, then "): return". */
+$static = static function (string $macro): array {
+    $blueprint = PHPStanTestCase::createReflectionProvider()->getClass(Blueprint::class);
+    $variant = (new TranslatableMacrosExtension)->getMethod($blueprint, $macro)->getVariants()[0];
+
+    return [
+        ...array_map(static fn (ParameterReflection $parameter): string => $parameter->getName().': '.$parameter->getType()->describe(VerbosityLevel::precise()), $variant->getParameters()),
+        '): '.$variant->getReturnType()->describe(VerbosityLevel::precise()),
+    ];
+};
+
+/** The signature of the closure the booted provider registered, in the same shape. */
+$runtime = static function (string $macro): array {
+    /** @var array<string, Closure> $macros */
+    $macros = (new ReflectionProperty(Blueprint::class, 'macros'))->getValue();
+    $function = new ReflectionFunction($macros[$macro]);
+
+    return [
+        ...array_map(static fn (ReflectionParameter $parameter): string => $parameter->getName().': '.$parameter->getType(), $function->getParameters()),
+        '): '.$function->getReturnType(),
+    ];
+};
+
+it('declares exactly the macros the provider registers', function () use ($root): void {
+    preg_match_all("/Blueprint::macro\\('(\\w+)'/", (string) file_get_contents($root.'/src/TranslatableServiceProvider.php'), $matches);
+
+    $extension = new TranslatableMacrosExtension;
+    $blueprint = PHPStanTestCase::createReflectionProvider()->getClass(Blueprint::class);
+
+    expect($matches[1])->toBe(TranslatableMacrosExtension::BLUEPRINT);
+
+    foreach (TranslatableMacrosExtension::BLUEPRINT as $macro) {
+        expect(Blueprint::hasMacro($macro))->toBeTrue()
+            ->and($extension->hasMethod($blueprint, $macro))->toBeTrue();
+    }
+});
+
+it('declares the macros on Blueprint only', function (): void {
+    $extension = new TranslatableMacrosExtension;
+    $provider = PHPStanTestCase::createReflectionProvider();
+
+    expect($extension->hasMethod($provider->getClass(Blueprint::class), 'jsonb'))->toBeFalse()
+        ->and($extension->hasMethod($provider->getClass(ColumnDefinition::class), 'translatable'))->toBeFalse();
+});
+
+it('matches the registered macro signature exactly', function () use ($static, $runtime): void {
+    expect($static('translatable'))->toBe(['name: string', '): '.ColumnDefinition::class])
+        ->and($static('translatable'))->toBe($runtime('translatable'));
+});
+
+it('describes a public, non-static, side-effecting method', function (): void {
+    $blueprint = PHPStanTestCase::createReflectionProvider()->getClass(Blueprint::class);
+    $method = (new TranslatableMacrosExtension)->getMethod($blueprint, 'translatable');
+
+    expect($method->getName())->toBe('translatable')
+        ->and($method->getDeclaringClass()->getName())->toBe(Blueprint::class)
+        ->and($method->getPrototype())->toBe($method)
+        ->and($method->isPublic())->toBeTrue()
+        ->and($method->isPrivate())->toBeFalse()
+        ->and($method->isStatic())->toBeFalse()
+        ->and($method->getDocComment())->toBeNull()
+        ->and($method->getThrowType())->toBeNull()
+        ->and($method->getDeprecatedDescription())->toBeNull()
+        ->and($method->isDeprecated())->toEqual(TrinaryLogic::createNo())
+        ->and($method->isFinal())->toEqual(TrinaryLogic::createNo())
+        ->and($method->isInternal())->toEqual(TrinaryLogic::createNo())
+        ->and($method->hasSideEffects())->toEqual(TrinaryLogic::createYes());
+
+    foreach ($method->getVariants()[0]->getParameters() as $parameter) {
+        expect($parameter->isOptional())->toBeFalse()
+            ->and($parameter->isVariadic())->toBeFalse()
+            ->and($parameter->getDefaultValue())->toBeNull()
+            ->and($parameter->passedByReference()->equals(PassedByReference::createNo()))->toBeTrue();
+    }
+});
+
+it('is wired into composer and extension.neon for consumers, and analysed here', function () use ($root): void {
+    $composer = json_decode((string) file_get_contents($root.'/composer.json'), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($composer['extra']['phpstan']['includes'] ?? [])->toBe(['extension.neon'])
+        ->and((string) file_get_contents($root.'/extension.neon'))
+        ->toContain(TranslatableMacrosExtension::class)
+        ->toContain('phpstan.broker.methodsClassReflectionExtension')
+        ->and((string) file_get_contents($root.'/phpstan.neon.dist'))
+        ->toContain('- extension.neon')
+        ->toContain('- tests/PHPStan');
+});
