@@ -106,3 +106,42 @@ it('is wired into composer and extension.neon for consumers, and analysed here',
         ->toContain('- extension.neon')
         ->toContain('- tests/PHPStan');
 });
+
+it('keeps PHPStan out of the runtime: only src/PHPStan names it', function () use ($root): void {
+    $scanned = 0;
+
+    /** @var SplFileInfo $file */
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root.'/src', FilesystemIterator::SKIP_DOTS)) as $file) {
+        if ($file->getExtension() !== 'php' || str_starts_with($file->getPathname(), $root.'/src/PHPStan/')) {
+            continue;
+        }
+
+        $code = '';
+
+        foreach (token_get_all((string) file_get_contents($file->getPathname())) as $token) {
+            if (! is_array($token) || ! in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+                $code .= is_array($token) ? $token[1] : $token;
+            }
+        }
+
+        $scanned++;
+        expect(str_contains($code, 'PHPStan\\'))->toBeFalse($file->getPathname());
+    }
+
+    expect($scanned)->toBeGreaterThan(10);
+});
+
+it('lets the extension import only PHPStan and the schema classes', function () use ($root): void {
+    $imports = [];
+
+    foreach (glob($root.'/src/PHPStan/*.php') ?: [] as $file) {
+        preg_match_all('/^use ([^;]+);/m', (string) file_get_contents($file), $matches);
+        $imports = [...$imports, ...$matches[1]];
+    }
+
+    expect($imports)->not->toBeEmpty();
+
+    foreach ($imports as $import) {
+        expect(str_starts_with($import, 'PHPStan\\') || str_starts_with($import, 'Illuminate\\Database\\Schema\\'))->toBeTrue($import);
+    }
+});
